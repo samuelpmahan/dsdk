@@ -18,7 +18,7 @@ from typing import Iterable, Iterator, Mapping
 
 from dsdk.core import Judgment, Status  # noqa: F401  (A1 builds on A0's kernel)
 
-from .formula import Formula
+from .formula import And, Const, Formula, Iff, Implies, Not, Or, Var, variables
 
 
 class UnassignedVariableError(KeyError):
@@ -34,6 +34,76 @@ class UnassignedVariableError(KeyError):
         return self.args[0]
 
 
+def _check_values(names: frozenset[str], assignment: Mapping[str, bool]) -> None:
+    """Raise TypeError if a value for a variable of the formula is not a real bool."""
+    for name in names:
+        if name in assignment and type(assignment[name]) is not bool:
+            raise TypeError(
+                f"value for {name!r} must be bool, got {type(assignment[name]).__name__}"
+            )
+
+
+def _not3(a: bool | None) -> bool | None:
+    return None if a is None else (not a)
+
+
+def _and3(a: bool | None, b: bool | None) -> bool | None:
+    if a is False or b is False:
+        return False
+    if a is None or b is None:
+        return None
+    return True
+
+
+def _or3(a: bool | None, b: bool | None) -> bool | None:
+    if a is True or b is True:
+        return True
+    if a is None or b is None:
+        return None
+    return False
+
+
+def _kleene(f: Formula, values: Mapping[str, bool]) -> bool | None:
+    """Strong Kleene value of ``f``; variables absent from ``values`` are UNKNOWN (None).
+
+    Iterative post-order traversal with an explicit stack and a result stack.
+    Each node's result is computed from its children's results only
+    (truth-functional); no cache is kept, so repeated sub-objects are evaluated
+    at each occurrence.
+    """
+    results: list[bool | None] = []
+    todo: list[tuple[Formula, bool]] = [(f, False)]
+    while todo:
+        node, expanded = todo.pop()
+        if isinstance(node, Const):
+            results.append(node.value)
+        elif isinstance(node, Var):
+            results.append(values.get(node.name))
+        elif not expanded:
+            todo.append((node, True))
+            if isinstance(node, Not):
+                todo.append((node.operand, False))
+            elif isinstance(node, (And, Or, Implies, Iff)):
+                todo.append((node.right, False))
+                todo.append((node.left, False))
+            else:
+                raise TypeError(f"unknown formula node: {type(node).__name__}")
+        elif isinstance(node, Not):
+            results.append(_not3(results.pop()))
+        else:
+            right = results.pop()
+            left = results.pop()
+            if isinstance(node, And):
+                results.append(_and3(left, right))
+            elif isinstance(node, Or):
+                results.append(_or3(left, right))
+            elif isinstance(node, Implies):
+                results.append(_or3(_not3(left), right))
+            else:  # Iff
+                results.append(None if (left is None or right is None) else (left == right))
+    return results[0]
+
+
 def evaluate(f: Formula, assignment: Mapping[str, bool]) -> bool:
     """Two-valued truth value of ``f`` under a TOTAL assignment.
 
@@ -46,7 +116,14 @@ def evaluate(f: Formula, assignment: Mapping[str, bool]) -> bool:
       raises ``TypeError`` (``1`` and ``None`` are rejected).
     * Implies(a, b) == (not a) or b;  Iff(a, b) == (a == b).
     """
-    raise NotImplementedError
+    names = variables(f)
+    _check_values(names, assignment)
+    missing = [n for n in names if n not in assignment]
+    if missing:
+        raise UnassignedVariableError(min(missing))
+    result = _kleene(f, assignment)
+    assert result is not None
+    return result
 
 
 def evaluate_partial(f: Formula, assignment: Mapping[str, bool]) -> Judgment:
@@ -79,7 +156,13 @@ def evaluate_partial(f: Formula, assignment: Mapping[str, bool]) -> Judgment:
     Extra keys are ignored. A value (for a variable occurring in ``f``) that is
     not exactly a ``bool`` raises ``TypeError``.
     """
-    raise NotImplementedError
+    names = variables(f)
+    _check_values(names, assignment)
+    missing = [n for n in names if n not in assignment]
+    value = _kleene(f, assignment)
+    if value is None:
+        return Judgment(Status.UNKNOWN, None, "unassigned: " + ", ".join(sorted(missing)))
+    return Judgment(Status.KNOWN, value, "")
 
 
 def models(f: Formula, over: Iterable[str] | None = None) -> Iterator[dict[str, bool]]:

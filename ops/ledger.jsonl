@@ -8,3 +8,4 @@
 {"ts": 1791494223, "task": "T04", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 160, "tests_passed": 83, "tests_total": 83, "round": 2, "note": ""}
 {"ts": 1791494270, "task": "T03", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 81, "tests_passed": 189, "tests_total": 189, "round": 2, "note": "spawned and archived a stray remote session (tool misuse)"}
 {"ts": 1791494379, "task": "T07", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 130, "tests_passed": 47, "tests_total": 47, "round": 3, "note": ""}
+{"ts": 1791494471, "task": "T05", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 420, "tests_passed": 85, "tests_total": 85, "round": 3, "note": ""}
