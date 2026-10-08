@@ -1,0 +1,1485 @@
+{
+ "note": "Canonical-string <-> structure cases shared by the Python and JS ports. Truth tables use the contract order: variables sorted ascending (plain string order), False before True, FIRST variable slowest. Generated and verified by an independent brute-force script (not by dsdk).",
+ "grammar": "formula := atom | '(' '~' formula ')' | '(' formula ' & ' formula ')' | '(' formula ' | ' formula ')' | '(' formula ' -> ' formula ')' | '(' formula ' <-> ' formula ')' ; atom := 'true' | 'false' | NAME ; NAME := [A-Za-z_][A-Za-z0-9_]* except true/false",
+ "invalid_var_names": [
+  "",
+  "1a",
+  "a b",
+  "a-b",
+  "a.b",
+  "true",
+  "false",
+  "a\n",
+  "\u00e9"
+ ],
+ "cases": [
+  {
+   "name": "const_true",
+   "string": "true",
+   "structure": {
+    "op": "const",
+    "value": true
+   },
+   "variables": [],
+   "size": 1,
+   "truth_table": [
+    {
+     "assignment": {},
+     "value": true
+    }
+   ],
+   "model_count": 1,
+   "satisfiable": true,
+   "valid": true
+  },
+  {
+   "name": "const_false",
+   "string": "false",
+   "structure": {
+    "op": "const",
+    "value": false
+   },
+   "variables": [],
+   "size": 1,
+   "truth_table": [
+    {
+     "assignment": {},
+     "value": false
+    }
+   ],
+   "model_count": 0,
+   "satisfiable": false,
+   "valid": false
+  },
+  {
+   "name": "var_a",
+   "string": "a",
+   "structure": {
+    "op": "var",
+    "name": "a"
+   },
+   "variables": [
+    "a"
+   ],
+   "size": 1,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 1,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "not_a",
+   "string": "(~a)",
+   "structure": {
+    "op": "not",
+    "operand": {
+     "op": "var",
+     "name": "a"
+    }
+   },
+   "variables": [
+    "a"
+   ],
+   "size": 2,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true
+     },
+     "value": false
+    }
+   ],
+   "model_count": 1,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "not_not_a",
+   "string": "(~(~a))",
+   "structure": {
+    "op": "not",
+    "operand": {
+     "op": "not",
+     "operand": {
+      "op": "var",
+      "name": "a"
+     }
+    }
+   },
+   "variables": [
+    "a"
+   ],
+   "size": 3,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 1,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "and_ab",
+   "string": "(a & b)",
+   "structure": {
+    "op": "and",
+    "left": {
+     "op": "var",
+     "name": "a"
+    },
+    "right": {
+     "op": "var",
+     "name": "b"
+    }
+   },
+   "variables": [
+    "a",
+    "b"
+   ],
+   "size": 3,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 1,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "or_ab",
+   "string": "(a | b)",
+   "structure": {
+    "op": "or",
+    "left": {
+     "op": "var",
+     "name": "a"
+    },
+    "right": {
+     "op": "var",
+     "name": "b"
+    }
+   },
+   "variables": [
+    "a",
+    "b"
+   ],
+   "size": 3,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 3,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "implies_ab",
+   "string": "(a -> b)",
+   "structure": {
+    "op": "implies",
+    "left": {
+     "op": "var",
+     "name": "a"
+    },
+    "right": {
+     "op": "var",
+     "name": "b"
+    }
+   },
+   "variables": [
+    "a",
+    "b"
+   ],
+   "size": 3,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 3,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "iff_ab",
+   "string": "(a <-> b)",
+   "structure": {
+    "op": "iff",
+    "left": {
+     "op": "var",
+     "name": "a"
+    },
+    "right": {
+     "op": "var",
+     "name": "b"
+    }
+   },
+   "variables": [
+    "a",
+    "b"
+   ],
+   "size": 3,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 2,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "excluded_middle",
+   "string": "(a | (~a))",
+   "structure": {
+    "op": "or",
+    "left": {
+     "op": "var",
+     "name": "a"
+    },
+    "right": {
+     "op": "not",
+     "operand": {
+      "op": "var",
+      "name": "a"
+     }
+    }
+   },
+   "variables": [
+    "a"
+   ],
+   "size": 4,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 2,
+   "satisfiable": true,
+   "valid": true
+  },
+  {
+   "name": "contradiction",
+   "string": "(a & (~a))",
+   "structure": {
+    "op": "and",
+    "left": {
+     "op": "var",
+     "name": "a"
+    },
+    "right": {
+     "op": "not",
+     "operand": {
+      "op": "var",
+      "name": "a"
+     }
+    }
+   },
+   "variables": [
+    "a"
+   ],
+   "size": 4,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true
+     },
+     "value": false
+    }
+   ],
+   "model_count": 0,
+   "satisfiable": false,
+   "valid": false
+  },
+  {
+   "name": "const_only_compound",
+   "string": "(true -> (~false))",
+   "structure": {
+    "op": "implies",
+    "left": {
+     "op": "const",
+     "value": true
+    },
+    "right": {
+     "op": "not",
+     "operand": {
+      "op": "const",
+      "value": false
+     }
+    }
+   },
+   "variables": [],
+   "size": 4,
+   "truth_table": [
+    {
+     "assignment": {},
+     "value": true
+    }
+   ],
+   "model_count": 1,
+   "satisfiable": true,
+   "valid": true
+  },
+  {
+   "name": "and_left_nested",
+   "string": "((a & b) & c)",
+   "structure": {
+    "op": "and",
+    "left": {
+     "op": "and",
+     "left": {
+      "op": "var",
+      "name": "a"
+     },
+     "right": {
+      "op": "var",
+      "name": "b"
+     }
+    },
+    "right": {
+     "op": "var",
+     "name": "c"
+    }
+   },
+   "variables": [
+    "a",
+    "b",
+    "c"
+   ],
+   "size": 5,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false,
+      "c": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": false,
+      "c": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true,
+      "c": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true,
+      "c": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false,
+      "c": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false,
+      "c": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true,
+      "c": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true,
+      "c": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 1,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "and_right_nested",
+   "string": "(a & (b & c))",
+   "structure": {
+    "op": "and",
+    "left": {
+     "op": "var",
+     "name": "a"
+    },
+    "right": {
+     "op": "and",
+     "left": {
+      "op": "var",
+      "name": "b"
+     },
+     "right": {
+      "op": "var",
+      "name": "c"
+     }
+    }
+   },
+   "variables": [
+    "a",
+    "b",
+    "c"
+   ],
+   "size": 5,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false,
+      "c": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": false,
+      "c": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true,
+      "c": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true,
+      "c": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false,
+      "c": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false,
+      "c": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true,
+      "c": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true,
+      "c": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 1,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "modus_ponens_axiom",
+   "string": "(((a -> b) & a) -> b)",
+   "structure": {
+    "op": "implies",
+    "left": {
+     "op": "and",
+     "left": {
+      "op": "implies",
+      "left": {
+       "op": "var",
+       "name": "a"
+      },
+      "right": {
+       "op": "var",
+       "name": "b"
+      }
+     },
+     "right": {
+      "op": "var",
+      "name": "a"
+     }
+    },
+    "right": {
+     "op": "var",
+     "name": "b"
+    }
+   },
+   "variables": [
+    "a",
+    "b"
+   ],
+   "size": 7,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 4,
+   "satisfiable": true,
+   "valid": true
+  },
+  {
+   "name": "affirming_consequent",
+   "string": "(((a -> b) & b) -> a)",
+   "structure": {
+    "op": "implies",
+    "left": {
+     "op": "and",
+     "left": {
+      "op": "implies",
+      "left": {
+       "op": "var",
+       "name": "a"
+      },
+      "right": {
+       "op": "var",
+       "name": "b"
+      }
+     },
+     "right": {
+      "op": "var",
+      "name": "b"
+     }
+    },
+    "right": {
+     "op": "var",
+     "name": "a"
+    }
+   },
+   "variables": [
+    "a",
+    "b"
+   ],
+   "size": 7,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 3,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "peirce",
+   "string": "(((a -> b) -> a) -> a)",
+   "structure": {
+    "op": "implies",
+    "left": {
+     "op": "implies",
+     "left": {
+      "op": "implies",
+      "left": {
+       "op": "var",
+       "name": "a"
+      },
+      "right": {
+       "op": "var",
+       "name": "b"
+      }
+     },
+     "right": {
+      "op": "var",
+      "name": "a"
+     }
+    },
+    "right": {
+     "op": "var",
+     "name": "a"
+    }
+   },
+   "variables": [
+    "a",
+    "b"
+   ],
+   "size": 7,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 4,
+   "satisfiable": true,
+   "valid": true
+  },
+  {
+   "name": "de_morgan",
+   "string": "((~(a & b)) <-> ((~a) | (~b)))",
+   "structure": {
+    "op": "iff",
+    "left": {
+     "op": "not",
+     "operand": {
+      "op": "and",
+      "left": {
+       "op": "var",
+       "name": "a"
+      },
+      "right": {
+       "op": "var",
+       "name": "b"
+      }
+     }
+    },
+    "right": {
+     "op": "or",
+     "left": {
+      "op": "not",
+      "operand": {
+       "op": "var",
+       "name": "a"
+      }
+     },
+     "right": {
+      "op": "not",
+      "operand": {
+       "op": "var",
+       "name": "b"
+      }
+     }
+    }
+   },
+   "variables": [
+    "a",
+    "b"
+   ],
+   "size": 10,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 4,
+   "satisfiable": true,
+   "valid": true
+  },
+  {
+   "name": "contrapositive",
+   "string": "((a -> b) <-> ((~b) -> (~a)))",
+   "structure": {
+    "op": "iff",
+    "left": {
+     "op": "implies",
+     "left": {
+      "op": "var",
+      "name": "a"
+     },
+     "right": {
+      "op": "var",
+      "name": "b"
+     }
+    },
+    "right": {
+     "op": "implies",
+     "left": {
+      "op": "not",
+      "operand": {
+       "op": "var",
+       "name": "b"
+      }
+     },
+     "right": {
+      "op": "not",
+      "operand": {
+       "op": "var",
+       "name": "a"
+      }
+     }
+    }
+   },
+   "variables": [
+    "a",
+    "b"
+   ],
+   "size": 9,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 4,
+   "satisfiable": true,
+   "valid": true
+  },
+  {
+   "name": "distribution",
+   "string": "((a & (b | c)) <-> ((a & b) | (a & c)))",
+   "structure": {
+    "op": "iff",
+    "left": {
+     "op": "and",
+     "left": {
+      "op": "var",
+      "name": "a"
+     },
+     "right": {
+      "op": "or",
+      "left": {
+       "op": "var",
+       "name": "b"
+      },
+      "right": {
+       "op": "var",
+       "name": "c"
+      }
+     }
+    },
+    "right": {
+     "op": "or",
+     "left": {
+      "op": "and",
+      "left": {
+       "op": "var",
+       "name": "a"
+      },
+      "right": {
+       "op": "var",
+       "name": "b"
+      }
+     },
+     "right": {
+      "op": "and",
+      "left": {
+       "op": "var",
+       "name": "a"
+      },
+      "right": {
+       "op": "var",
+       "name": "c"
+      }
+     }
+    }
+   },
+   "variables": [
+    "a",
+    "b",
+    "c"
+   ],
+   "size": 13,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false,
+      "c": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": false,
+      "c": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true,
+      "c": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true,
+      "c": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false,
+      "c": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false,
+      "c": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true,
+      "c": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true,
+      "c": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 8,
+   "satisfiable": true,
+   "valid": true
+  },
+  {
+   "name": "xor_ish",
+   "string": "(~(a <-> b))",
+   "structure": {
+    "op": "not",
+    "operand": {
+     "op": "iff",
+     "left": {
+      "op": "var",
+      "name": "a"
+     },
+     "right": {
+      "op": "var",
+      "name": "b"
+     }
+    }
+   },
+   "variables": [
+    "a",
+    "b"
+   ],
+   "size": 4,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true
+     },
+     "value": false
+    }
+   ],
+   "model_count": 2,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "or_with_false_const",
+   "string": "(b | false)",
+   "structure": {
+    "op": "or",
+    "left": {
+     "op": "var",
+     "name": "b"
+    },
+    "right": {
+     "op": "const",
+     "value": false
+    }
+   },
+   "variables": [
+    "b"
+   ],
+   "size": 3,
+   "truth_table": [
+    {
+     "assignment": {
+      "b": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "b": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 1,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "wumpus_rule_B11",
+   "string": "(B11 <-> (P12 | P21))",
+   "structure": {
+    "op": "iff",
+    "left": {
+     "op": "var",
+     "name": "B11"
+    },
+    "right": {
+     "op": "or",
+     "left": {
+      "op": "var",
+      "name": "P12"
+     },
+     "right": {
+      "op": "var",
+      "name": "P21"
+     }
+    }
+   },
+   "variables": [
+    "B11",
+    "P12",
+    "P21"
+   ],
+   "size": 5,
+   "truth_table": [
+    {
+     "assignment": {
+      "B11": false,
+      "P12": false,
+      "P21": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "B11": false,
+      "P12": false,
+      "P21": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "B11": false,
+      "P12": true,
+      "P21": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "B11": false,
+      "P12": true,
+      "P21": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "B11": true,
+      "P12": false,
+      "P21": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "B11": true,
+      "P12": false,
+      "P21": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "B11": true,
+      "P12": true,
+      "P21": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "B11": true,
+      "P12": true,
+      "P21": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 4,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "capitalised_names",
+   "string": "(True & _x1)",
+   "structure": {
+    "op": "and",
+    "left": {
+     "op": "var",
+     "name": "True"
+    },
+    "right": {
+     "op": "var",
+     "name": "_x1"
+    }
+   },
+   "variables": [
+    "True",
+    "_x1"
+   ],
+   "size": 3,
+   "truth_table": [
+    {
+     "assignment": {
+      "True": false,
+      "_x1": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "True": false,
+      "_x1": true
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "True": true,
+      "_x1": false
+     },
+     "value": false
+    },
+    {
+     "assignment": {
+      "True": true,
+      "_x1": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 1,
+   "satisfiable": true,
+   "valid": false
+  },
+  {
+   "name": "three_var_chain",
+   "string": "(a -> (b -> (c -> a)))",
+   "structure": {
+    "op": "implies",
+    "left": {
+     "op": "var",
+     "name": "a"
+    },
+    "right": {
+     "op": "implies",
+     "left": {
+      "op": "var",
+      "name": "b"
+     },
+     "right": {
+      "op": "implies",
+      "left": {
+       "op": "var",
+       "name": "c"
+      },
+      "right": {
+       "op": "var",
+       "name": "a"
+      }
+     }
+    }
+   },
+   "variables": [
+    "a",
+    "b",
+    "c"
+   ],
+   "size": 7,
+   "truth_table": [
+    {
+     "assignment": {
+      "a": false,
+      "b": false,
+      "c": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": false,
+      "c": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true,
+      "c": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": false,
+      "b": true,
+      "c": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false,
+      "c": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": false,
+      "c": true
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true,
+      "c": false
+     },
+     "value": true
+    },
+    {
+     "assignment": {
+      "a": true,
+      "b": true,
+      "c": true
+     },
+     "value": true
+    }
+   ],
+   "model_count": 8,
+   "satisfiable": true,
+   "valid": true
+  }
+ ]
+}

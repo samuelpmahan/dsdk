@@ -1,0 +1,328 @@
+{
+ "note": "Russell & Norvig wumpus-world corner, restricted to the cells encoded here (pit cells P11,P12,P21,P22,P31; breeze cells B11,B21). Rules: B11<->(P12|P21), B21<->(P11|P22|P31). Percepts: ~B11, B21, ~P11. TRACK A3 will weight these models (each model's weight = prior over its pit variables, e.g. p^pits*(1-p)^(non-pits)) to get Wumpus pit probabilities: P(P22) and P(P31) come from the 'models' list below, so model_count and the model list are the oracle. Expected: KB entails ~P12 and ~P21 (no breeze at (1,1) rules out both neighbours), does NOT entail P22 or ~P22 (breeze at (2,1) with ~P11 only forces P22|P31). Order of 'models' and 'first_countermodel' follows the contract enumeration order (sorted variable names, False<True, first variable slowest). Verified by hand-enumeration in a scratch script.",
+ "variables": [
+  "B11",
+  "B21",
+  "P11",
+  "P12",
+  "P21",
+  "P22",
+  "P31"
+ ],
+ "premises": [
+  {
+   "name": "rule_B11",
+   "string": "(B11 <-> (P12 | P21))",
+   "structure": {
+    "op": "iff",
+    "left": {
+     "op": "var",
+     "name": "B11"
+    },
+    "right": {
+     "op": "or",
+     "left": {
+      "op": "var",
+      "name": "P12"
+     },
+     "right": {
+      "op": "var",
+      "name": "P21"
+     }
+    }
+   }
+  },
+  {
+   "name": "rule_B21",
+   "string": "(B21 <-> ((P11 | P22) | P31))",
+   "structure": {
+    "op": "iff",
+    "left": {
+     "op": "var",
+     "name": "B21"
+    },
+    "right": {
+     "op": "or",
+     "left": {
+      "op": "or",
+      "left": {
+       "op": "var",
+       "name": "P11"
+      },
+      "right": {
+       "op": "var",
+       "name": "P22"
+      }
+     },
+     "right": {
+      "op": "var",
+      "name": "P31"
+     }
+    }
+   }
+  },
+  {
+   "name": "percept_no_breeze_1_1",
+   "string": "(~B11)",
+   "structure": {
+    "op": "not",
+    "operand": {
+     "op": "var",
+     "name": "B11"
+    }
+   }
+  },
+  {
+   "name": "percept_breeze_2_1",
+   "string": "B21",
+   "structure": {
+    "op": "var",
+    "name": "B21"
+   }
+  },
+  {
+   "name": "percept_no_pit_1_1",
+   "string": "(~P11)",
+   "structure": {
+    "op": "not",
+    "operand": {
+     "op": "var",
+     "name": "P11"
+    }
+   }
+  }
+ ],
+ "model_count": 3,
+ "models": [
+  {
+   "B11": false,
+   "B21": true,
+   "P11": false,
+   "P12": false,
+   "P21": false,
+   "P22": false,
+   "P31": true
+  },
+  {
+   "B11": false,
+   "B21": true,
+   "P11": false,
+   "P12": false,
+   "P21": false,
+   "P22": true,
+   "P31": false
+  },
+  {
+   "B11": false,
+   "B21": true,
+   "P11": false,
+   "P12": false,
+   "P21": false,
+   "P22": true,
+   "P31": true
+  }
+ ],
+ "queries": [
+  {
+   "name": "not_P12",
+   "string": "(~P12)",
+   "structure": {
+    "op": "not",
+    "operand": {
+     "op": "var",
+     "name": "P12"
+    }
+   },
+   "entails": true,
+   "first_countermodel": null
+  },
+  {
+   "name": "not_P21",
+   "string": "(~P21)",
+   "structure": {
+    "op": "not",
+    "operand": {
+     "op": "var",
+     "name": "P21"
+    }
+   },
+   "entails": true,
+   "first_countermodel": null
+  },
+  {
+   "name": "P12",
+   "string": "P12",
+   "structure": {
+    "op": "var",
+    "name": "P12"
+   },
+   "entails": false,
+   "first_countermodel": {
+    "B11": false,
+    "B21": true,
+    "P11": false,
+    "P12": false,
+    "P21": false,
+    "P22": false,
+    "P31": true
+   }
+  },
+  {
+   "name": "P21",
+   "string": "P21",
+   "structure": {
+    "op": "var",
+    "name": "P21"
+   },
+   "entails": false,
+   "first_countermodel": {
+    "B11": false,
+    "B21": true,
+    "P11": false,
+    "P12": false,
+    "P21": false,
+    "P22": false,
+    "P31": true
+   }
+  },
+  {
+   "name": "P22",
+   "string": "P22",
+   "structure": {
+    "op": "var",
+    "name": "P22"
+   },
+   "entails": false,
+   "first_countermodel": {
+    "B11": false,
+    "B21": true,
+    "P11": false,
+    "P12": false,
+    "P21": false,
+    "P22": false,
+    "P31": true
+   }
+  },
+  {
+   "name": "not_P22",
+   "string": "(~P22)",
+   "structure": {
+    "op": "not",
+    "operand": {
+     "op": "var",
+     "name": "P22"
+    }
+   },
+   "entails": false,
+   "first_countermodel": {
+    "B11": false,
+    "B21": true,
+    "P11": false,
+    "P12": false,
+    "P21": false,
+    "P22": true,
+    "P31": false
+   }
+  },
+  {
+   "name": "P31",
+   "string": "P31",
+   "structure": {
+    "op": "var",
+    "name": "P31"
+   },
+   "entails": false,
+   "first_countermodel": {
+    "B11": false,
+    "B21": true,
+    "P11": false,
+    "P12": false,
+    "P21": false,
+    "P22": true,
+    "P31": false
+   }
+  },
+  {
+   "name": "not_P31",
+   "string": "(~P31)",
+   "structure": {
+    "op": "not",
+    "operand": {
+     "op": "var",
+     "name": "P31"
+    }
+   },
+   "entails": false,
+   "first_countermodel": {
+    "B11": false,
+    "B21": true,
+    "P11": false,
+    "P12": false,
+    "P21": false,
+    "P22": false,
+    "P31": true
+   }
+  },
+  {
+   "name": "P22_or_P31",
+   "string": "(P22 | P31)",
+   "structure": {
+    "op": "or",
+    "left": {
+     "op": "var",
+     "name": "P22"
+    },
+    "right": {
+     "op": "var",
+     "name": "P31"
+    }
+   },
+   "entails": true,
+   "first_countermodel": null
+  },
+  {
+   "name": "not_P11",
+   "string": "(~P11)",
+   "structure": {
+    "op": "not",
+    "operand": {
+     "op": "var",
+     "name": "P11"
+    }
+   },
+   "entails": true,
+   "first_countermodel": null
+  },
+  {
+   "name": "not_P22_and_not_P31",
+   "string": "((~P22) & (~P31))",
+   "structure": {
+    "op": "and",
+    "left": {
+     "op": "not",
+     "operand": {
+      "op": "var",
+      "name": "P22"
+     }
+    },
+    "right": {
+     "op": "not",
+     "operand": {
+      "op": "var",
+      "name": "P31"
+     }
+    }
+   },
+   "entails": false,
+   "first_countermodel": {
+    "B11": false,
+    "B21": true,
+    "P11": false,
+    "P12": false,
+    "P21": false,
+    "P22": false,
+    "P31": true
+   }
+  }
+ ]
+}
