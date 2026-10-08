@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Iterable, Sequence
 
-from .formula import Formula
+from .formula import And, Formula, Implies, Not, Or
 
 
 class Rule(StrEnum):
@@ -59,7 +59,15 @@ class Step:
     cites: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        if not isinstance(self.formula, Formula):
+            raise TypeError(f"Step.formula must be a Formula, got {type(self.formula).__name__}")
+        if not isinstance(self.rule, Rule):
+            raise TypeError(f"Step.rule must be a Rule member, got {self.rule!r}")
+        if type(self.cites) is not tuple:
+            raise TypeError(f"Step.cites must be a tuple, got {type(self.cites).__name__}")
+        for c in self.cites:
+            if type(c) is not int:
+                raise TypeError(f"Step.cites entries must be int, got {c!r}")
 
 
 Proof = Sequence[Step]
@@ -91,4 +99,77 @@ def check(proof: Proof, premises: Iterable[Formula]) -> CheckResult:
     the first invalid step, so later invalid steps are never reported.
     ``premises`` may be any iterable of formulas (consumed once).
     """
-    raise NotImplementedError
+    premise_list = list(premises)
+    arity = {
+        Rule.PREMISE: 0,
+        Rule.MODUS_PONENS: 2,
+        Rule.MODUS_TOLLENS: 2,
+        Rule.AND_INTRO: 2,
+        Rule.AND_ELIM_LEFT: 1,
+        Rule.AND_ELIM_RIGHT: 1,
+        Rule.OR_INTRO_LEFT: 1,
+        Rule.OR_INTRO_RIGHT: 1,
+        Rule.DOUBLE_NEGATION_ELIM: 1,
+    }
+    formulas: list[Formula] = []
+
+    for i, step in enumerate(proof):
+        rule = step.rule
+        cites = step.cites
+
+        def fail(detail: str) -> CheckResult:
+            return CheckResult(False, i, f"step {i} ({rule.value}): {detail}")
+
+        # 1. arity first
+        if len(cites) != arity[rule]:
+            return fail(f"rule takes {arity[rule]} cites, got {len(cites)}")
+        # 2. citations must be strictly earlier steps
+        for c in cites:
+            if not (0 <= c < i):
+                return fail(f"cites step {c}, which is not an earlier step (must satisfy 0 <= c < {i})")
+        cited = [formulas[c] for c in cites]
+        f = step.formula
+
+        # 3. the rule itself
+        if rule is Rule.PREMISE:
+            if f not in premise_list:
+                return fail("formula is not one of the premises")
+        elif rule is Rule.MODUS_PONENS:
+            imp, ante = cited
+            if not (isinstance(imp, Implies) and ante == imp.left and f == imp.right):
+                return fail("requires Implies(p, q) and p, concluding q")
+        elif rule is Rule.MODUS_TOLLENS:
+            imp, neg = cited
+            if not (isinstance(imp, Implies) and isinstance(neg, Not) and neg.operand == imp.right
+                    and f == Not(imp.left)):
+                return fail("requires Implies(p, q) and Not(q), concluding Not(p)")
+        elif rule is Rule.AND_INTRO:
+            left, right = cited
+            if f != And(left, right):
+                return fail("conclusion must be And(cited[0], cited[1])")
+        elif rule is Rule.AND_ELIM_LEFT:
+            (src,) = cited
+            if not (isinstance(src, And) and f == src.left):
+                return fail("requires And(l, r), concluding l")
+        elif rule is Rule.AND_ELIM_RIGHT:
+            (src,) = cited
+            if not (isinstance(src, And) and f == src.right):
+                return fail("requires And(l, r), concluding r")
+        elif rule is Rule.OR_INTRO_LEFT:
+            (src,) = cited
+            if not (isinstance(f, Or) and f.left == src):
+                return fail("conclusion must be Or(cited formula, X)")
+        elif rule is Rule.OR_INTRO_RIGHT:
+            (src,) = cited
+            if not (isinstance(f, Or) and f.right == src):
+                return fail("conclusion must be Or(X, cited formula)")
+        elif rule is Rule.DOUBLE_NEGATION_ELIM:
+            (src,) = cited
+            if not (isinstance(src, Not) and isinstance(src.operand, Not) and f == src.operand.operand):
+                return fail("requires Not(Not(p)), concluding p")
+        else:  # pragma: no cover - all Rule members are handled above
+            return fail("unknown rule")
+
+        formulas.append(f)
+
+    return CheckResult(True, None, "")
