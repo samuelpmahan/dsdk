@@ -6,3 +6,4 @@
 {"ts": 1791494048, "task": "T01", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 76, "tests_passed": 41, "tests_total": 41, "round": 1, "note": ""}
 {"ts": 1791494189, "task": "T02", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 217, "tests_passed": 131, "tests_total": 131, "round": 1, "note": ""}
 {"ts": 1791494223, "task": "T04", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 160, "tests_passed": 83, "tests_total": 83, "round": 2, "note": ""}
+{"ts": 1791494270, "task": "T03", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 81, "tests_passed": 189, "tests_total": 189, "round": 2, "note": "spawned and archived a stray remote session (tool misuse)"}

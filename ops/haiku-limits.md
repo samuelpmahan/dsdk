@@ -5,3 +5,4 @@ What Haiku got wrong, so we stop handing it that shape of task, or we spell it o
 | Date | Task | Attempt | What went wrong | Prompt fix |
 |---|---|---|---|---|
 | 2026-10-08 | inv-misc (15 repos) | 1 | It saw one local ref in a shallow clone and took that to mean the remote had one branch, so it skipped the fetch. The instruction was conditional ("for each repo with >1 branch") and it evaluated the condition from the wrong source. | Make instructions unconditional, or give the precomputed fact ("remote has N branches"). Don't let Haiku decide whether a step applies. |
+| 2026-10-08 | T03 core-tick | 1 | Passed, but it created a stray Claude Code Remote session by mistake and then archived it. Haiku will reach for powerful tools it was never asked to use. | Implementation prompts should say "use only Read/Edit/Bash; never create sessions, triggers, or agents". Consider restricting tools for implementer agents. |

@@ -164,16 +164,91 @@ class TickScope:
       plus this tick's staged ones.
     """
 
+    def __init__(self, store: "PxC", id: str) -> None:
+        self._store = store
+        self._id = id
+        self._open = True
+        self._staged: dict[str, Part] = {}  # address -> staged Part, in compose order
+        self._receipts: list[Receipt] = []  # every attempt, in attempt order
+
+    def _check_open(self) -> None:
+        if not self._open:
+            raise TickInProgressError(f"tick {self._id!r} has exited; its scope is dead")
+
     def compose(
         self, into: str, calculation: Reference, inputs: Mapping[str, Reference] | None = None
     ) -> Part:
-        raise NotImplementedError
+        self._check_open()
+        receipt = self._store._preflight_and_attempt(into, calculation, inputs, self, self._id)
+        self._receipts.append(receipt)
+        if receipt.status is ReceiptStatus.FAILED:
+            raise receipt.error  # type: ignore[misc]  # the same exception object
+        self._staged[into] = receipt.output  # type: ignore[assignment]
+        return receipt.output  # type: ignore[return-value]
 
     def get(self, address: str) -> Part:
-        raise NotImplementedError
+        self._check_open()
+        _check_address(address)
+        if address in self._staged:
+            return self._staged[address]
+        return self._store.get(address)
 
     def has(self, address: str) -> bool:
-        raise NotImplementedError
+        self._check_open()
+        _check_address(address)
+        return address in self._staged or self._store.has(address)
+
+    def _commit(self) -> None:
+        """Bind every staged Part (compose order), then record all attempts."""
+        for address, part in self._staged.items():
+            self._store._bindings[address] = part
+        self._store._receipts.extend(self._receipts)
+
+    def _rollback(self, exc: BaseException) -> None:
+        """Bind nothing. Successful attempts become FAILED with ``exc``; own
+        failures keep their own error. Receipts are recorded in attempt order."""
+        for r in self._receipts:
+            if r.status is ReceiptStatus.PRODUCED:
+                self._store._receipts.append(
+                    Receipt(ReceiptStatus.FAILED, r.into, r.composition, None, exc, r.tick))
+            else:
+                self._store._receipts.append(r)
+
+
+class _TickBlock(AbstractContextManager):
+    """The context manager returned by :meth:`PxC.tick`. Validation and opening
+    happen on ``__enter__`` so a bad id raises inside the ``with``."""
+
+    def __init__(self, store: "PxC", id: str) -> None:
+        self._store = store
+        self._id = id
+        self._scope: TickScope | None = None
+
+    def __enter__(self) -> TickScope:
+        store = self._store
+        store._check_no_tick()
+        if not isinstance(self._id, str):
+            raise TypeError(f"tick id must be str, not {type(self._id).__name__}")
+        if not self._id:
+            raise ValueError("tick id must be a non-empty str")
+        store._tick_open = True
+        self._scope = TickScope(store, self._id)
+        return self._scope
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        scope = self._scope
+        store = self._store
+        try:
+            if scope is not None:
+                if exc_type is None:
+                    scope._commit()
+                else:
+                    scope._rollback(exc)
+        finally:
+            if scope is not None:
+                scope._open = False
+            store._tick_open = False
+        return False  # never suppress: the same exception propagates unchanged
 
 
 _ADDRESS = re.compile(r"(?:px|fn|sc)\..+")
@@ -283,32 +358,48 @@ class PxC:
         PRODUCED receipt, return the Part.
         """
         self._check_no_tick()
-        _check_address(into)
-        if self._is_occupied(into):
-            raise AddressOccupiedError(f"address {into!r} is already bound or in flight")
-        calc = self._resolve_calculation(calculation)
-        input_parts = self._resolve_inputs(inputs)
-        receipt = self._attempt(into, calc, input_parts)
+        receipt = self._preflight_and_attempt(into, calculation, inputs)
         self._receipts.append(receipt)
         if receipt.status is ReceiptStatus.FAILED:
             raise receipt.error  # type: ignore[misc]  # the same exception object
         self._bindings[into] = receipt.output  # type: ignore[assignment]
         return receipt.output  # type: ignore[return-value]
 
-    # ---- shared internals (compose now; TickScope.compose reuses them in T03) ----
+    # ---- shared internals (PxC.compose and TickScope.compose both use them) ----
 
     def _check_no_tick(self) -> None:
         if self._tick_open:
             raise TickInProgressError("a tick is open; use its scope instead")
 
-    def _is_occupied(self, address: str) -> bool:
-        """Bound, or reserved by a compose currently running into it."""
-        return address in self._bindings or address in self._in_flight
+    def _preflight_and_attempt(
+        self,
+        into: Any,
+        calculation: Reference,
+        inputs: Mapping[str, Reference] | None,
+        scope: "TickScope | None" = None,
+        tick: str | None = None,
+    ) -> Receipt:
+        """Preflight steps 1-3 (raise without a receipt), then one attempt.
+        ``scope`` (a tick's scope) supplies staged Parts for lookups and occupancy;
+        ``None`` means the committed store only."""
+        _check_address(into)
+        if self._is_occupied(into, scope):
+            raise AddressOccupiedError(f"address {into!r} is already bound or in flight")
+        calc = self._resolve_calculation(calculation, scope)
+        input_parts = self._resolve_inputs(inputs, scope)
+        return self._attempt(into, calc, input_parts, tick)
 
-    def _resolve_calculation(self, calculation: Reference) -> Part:
+    def _is_occupied(self, address: str, scope: "TickScope | None" = None) -> bool:
+        """Bound, reserved by a compose currently running into it, or (inside a
+        tick) staged by that tick."""
+        if address in self._bindings or address in self._in_flight:
+            return True
+        return scope is not None and address in scope._staged
+
+    def _resolve_calculation(self, calculation: Reference, scope: "TickScope | None" = None) -> Part:
         """Preflight step 2: resolve to a Part whose value is callable."""
         if isinstance(calculation, str):
-            calc = self.get(calculation)
+            calc = scope.get(calculation) if scope is not None else self.get(calculation)
         elif isinstance(calculation, Part):
             calc = calculation
         else:
@@ -317,7 +408,9 @@ class PxC:
             raise TypeError("calculation Part must hold a callable")
         return calc
 
-    def _resolve_inputs(self, inputs: Mapping[str, Reference] | None) -> dict[str, Part]:
+    def _resolve_inputs(
+        self, inputs: Mapping[str, Reference] | None, scope: "TickScope | None" = None
+    ) -> dict[str, Part]:
         """Preflight step 3: a mapping of non-empty str names to Parts/addresses.
         Returns a NEW dict in the caller's order."""
         if inputs is None:
@@ -329,7 +422,7 @@ class PxC:
             if not isinstance(name, str) or not name:
                 raise TypeError(f"input names must be non-empty str, not {name!r}")
             if isinstance(ref, str):
-                part = self.get(ref)
+                part = scope.get(ref) if scope is not None else self.get(ref)
             elif isinstance(ref, Part):
                 part = ref
             else:
@@ -382,4 +475,4 @@ class PxC:
         inside the tick raise without a receipt, like outside.
         Every receipt of a tick has ``tick == id``.
         """
-        raise NotImplementedError
+        return _TickBlock(self, id)
