@@ -61,4 +61,14 @@ class Judgment:
     reason: str = ""
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        if not isinstance(self.status, Status):
+            raise TypeError(f"status must be a Status member, got {self.status!r}")
+        if not isinstance(self.reason, str):
+            raise TypeError(f"reason must be a str, got {type(self.reason).__name__}")
+        if self.status is Status.KNOWN:
+            if self.value is None:
+                raise ValueError("KNOWN judgment requires a non-None value")
+        elif self.value is not None:
+            raise ValueError(f"{self.status.name} judgment must not carry a value")
+        if self.status is Status.INVALID and self.reason.strip() == "":
+            raise ValueError("INVALID judgment requires a non-blank reason")
