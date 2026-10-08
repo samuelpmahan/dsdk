@@ -68,8 +68,8 @@ States: Proposed → Selected → Building → Evidence ready → Reviewed.
 
 | Track | State | Next bounded step |
 |---|---|---|
-| A0 core | Building | Haiku tasks T01–T03 |
-| A1 logic | Building | Haiku tasks T04–T08; Sam reads `tracks/A1/PROOFS.md` and rewrites one proof unaided |
+| A0 core | Evidence ready | 189 tests green. Next: Sam reads `pxc.py` tick semantics and explains rollback receipts back |
+| A1 logic | Evidence ready | 476 tests green. Next: Sam rewrites one proof from `tracks/A1/PROOFS.md` unaided; then A2 contract |
 | A2 lang | Proposed | Sonnet contract: parser must round-trip `logic.to_str` |
 | A5 graph | Proposed | Contract: BFS + witness paths over Part lineage |
 | A3 prob | Proposed | Contract: weight `wumpus_kb` models; reproduce 4/9, 4/9, 1/9 |
