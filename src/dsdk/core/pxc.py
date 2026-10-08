@@ -45,9 +45,13 @@ Tick         A minimal atomic group of composes (DEVIATION/addition: the JS
 """
 from __future__ import annotations
 
+import collections.abc
+import copy
+import re
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import Any, Mapping, Union
 
 
@@ -82,16 +86,25 @@ class Part:
     Only :class:`PxC` creates Parts that have a composition.
     """
 
+    __slots__ = ("_value", "_composition")
+
     def __init__(self, value: Any) -> None:
-        raise NotImplementedError
+        object.__setattr__(self, "_value", _capture(value))
+        object.__setattr__(self, "_composition", None)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError(f"Part is immutable; cannot set {name!r}")
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError(f"Part is immutable; cannot delete {name!r}")
 
     @property
     def value(self) -> Any:
-        raise NotImplementedError
+        return _capture(self._value)
 
     @property
     def composition(self) -> "Composition | None":
-        raise NotImplementedError
+        return self._composition
 
 
 @dataclass(frozen=True)
@@ -163,39 +176,82 @@ class TickScope:
         raise NotImplementedError
 
 
+_ADDRESS = re.compile(r"(?:px|fn|sc)\..+")
+
+
+def _capture(value: Any) -> Any:
+    """Callables are kept by reference; everything else is deep-copied."""
+    if callable(value):
+        return value
+    return copy.deepcopy(value)
+
+
+def _check_address(address: Any) -> None:
+    """TypeError for non-str; ValueError unless ``<px|fn|sc>.<non-empty>``.
+    ``fullmatch`` (not ``$``) so a trailing newline is rejected."""
+    if not isinstance(address, str):
+        raise TypeError(f"address must be str, not {type(address).__name__}")
+    if _ADDRESS.fullmatch(address) is None:
+        raise ValueError(f"malformed address {address!r}: expected '<px|fn|sc>.<name>'")
+
+
+def _lineage_part(value: Any, composition: Composition) -> Part:
+    """Build a composed Part. Only the store uses this (the public ``Part(value)``
+    signature stays unchanged)."""
+    part = Part(value)
+    object.__setattr__(part, "_composition", composition)
+    return part
+
+
 class PxC:
     """The store. See the module docstring for the shared rules."""
 
     def __init__(self) -> None:
-        raise NotImplementedError
+        self._bindings: dict[str, Part] = {}
+        self._receipts: list[Receipt] = []
+        self._in_flight: set[str] = set()
+        self._tick_open = False  # set by the tick machinery (T03); always False until then
 
     def set(self, address: str, part: Part) -> Part:
         """Bind an existing :class:`Part` (not a raw value: ``TypeError``) at a
         free address and return it (the same object). No receipt is recorded.
         Order of checks: tick open (``TickInProgressError``), address validity,
         ``part`` type, ``fn.*`` callable rule, occupied."""
-        raise NotImplementedError
+        self._check_no_tick()
+        _check_address(address)
+        if not isinstance(part, Part):
+            raise TypeError(f"set() takes a Part, not {type(part).__name__}")
+        if address.startswith("fn.") and not callable(part._value):
+            raise TypeError(f"{address!r} is an fn.* address and must hold a callable")
+        if self._is_occupied(address):
+            raise AddressOccupiedError(f"address {address!r} is already bound")
+        self._bindings[address] = part
+        return part
 
     def get(self, address: str) -> Part:
         """The bound Part (the same object every time). ``MissingPartError``
         if unbound; address validity rules apply."""
-        raise NotImplementedError
+        _check_address(address)
+        if address not in self._bindings:
+            raise MissingPartError(f"no Part bound at {address!r}")
+        return self._bindings[address]
 
     def has(self, address: str) -> bool:
         """True iff bound (in-flight/staged addresses are not bound yet)."""
-        raise NotImplementedError
+        _check_address(address)
+        return address in self._bindings
 
     def entries(self) -> tuple[tuple[str, Part], ...]:
         """All bindings as ``(address, part)`` in BINDING order (the order in
         which they were successfully set/composed; a tick's bindings appear in
         its compose order). Committed state only. Immutable snapshot."""
-        raise NotImplementedError
+        return tuple(self._bindings.items())
 
     def receipts(self) -> tuple[Receipt, ...]:
         """All receipts in the order recorded, as an immutable snapshot. A
         tick's receipts are recorded together when the tick exits, in the
         order the composes were attempted; none are visible while it is open."""
-        raise NotImplementedError
+        return tuple(self._receipts)
 
     def compose(
         self, into: str, calculation: Reference, inputs: Mapping[str, Reference] | None = None
@@ -226,7 +282,82 @@ class PxC:
         and the SAME exception object is re-raised. On success: bind, record a
         PRODUCED receipt, return the Part.
         """
-        raise NotImplementedError
+        self._check_no_tick()
+        _check_address(into)
+        if self._is_occupied(into):
+            raise AddressOccupiedError(f"address {into!r} is already bound or in flight")
+        calc = self._resolve_calculation(calculation)
+        input_parts = self._resolve_inputs(inputs)
+        receipt = self._attempt(into, calc, input_parts)
+        self._receipts.append(receipt)
+        if receipt.status is ReceiptStatus.FAILED:
+            raise receipt.error  # type: ignore[misc]  # the same exception object
+        self._bindings[into] = receipt.output  # type: ignore[assignment]
+        return receipt.output  # type: ignore[return-value]
+
+    # ---- shared internals (compose now; TickScope.compose reuses them in T03) ----
+
+    def _check_no_tick(self) -> None:
+        if self._tick_open:
+            raise TickInProgressError("a tick is open; use its scope instead")
+
+    def _is_occupied(self, address: str) -> bool:
+        """Bound, or reserved by a compose currently running into it."""
+        return address in self._bindings or address in self._in_flight
+
+    def _resolve_calculation(self, calculation: Reference) -> Part:
+        """Preflight step 2: resolve to a Part whose value is callable."""
+        if isinstance(calculation, str):
+            calc = self.get(calculation)
+        elif isinstance(calculation, Part):
+            calc = calculation
+        else:
+            raise TypeError(f"calculation must be a Part or address, not {type(calculation).__name__}")
+        if not callable(calc._value):
+            raise TypeError("calculation Part must hold a callable")
+        return calc
+
+    def _resolve_inputs(self, inputs: Mapping[str, Reference] | None) -> dict[str, Part]:
+        """Preflight step 3: a mapping of non-empty str names to Parts/addresses.
+        Returns a NEW dict in the caller's order."""
+        if inputs is None:
+            return {}
+        if not isinstance(inputs, collections.abc.Mapping):
+            raise TypeError(f"inputs must be a Mapping, not {type(inputs).__name__}")
+        resolved: dict[str, Part] = {}
+        for name, ref in inputs.items():
+            if not isinstance(name, str) or not name:
+                raise TypeError(f"input names must be non-empty str, not {name!r}")
+            if isinstance(ref, str):
+                part = self.get(ref)
+            elif isinstance(ref, Part):
+                part = ref
+            else:
+                raise TypeError(f"input {name!r} must be a Part or address, not {type(ref).__name__}")
+            resolved[name] = part
+        return resolved
+
+    def _attempt(
+        self, into: str, calc: Part, input_parts: Mapping[str, Part], tick: str | None = None
+    ) -> Receipt:
+        """Run one compose that has already passed preflight. ``into`` is reserved
+        (in flight) while the calculation runs. Calculation or output failures are
+        NOT raised: they come back as a FAILED Receipt holding the exception, and
+        the caller decides whether to re-raise or roll back. A PRODUCED receipt's
+        output is returned UNBOUND; the caller binds it."""
+        composition = Composition(calculation=calc, inputs=MappingProxyType(dict(input_parts)))
+        self._in_flight.add(into)
+        try:
+            values = {name: part.value for name, part in input_parts.items()}
+            result = calc.value(values)
+            if into.startswith("fn.") and not callable(result):
+                raise TypeError(f"{into!r} is an fn.* address and its output must be callable")
+            output = _lineage_part(result, composition)
+        except BaseException as exc:
+            return Receipt(ReceiptStatus.FAILED, into, composition, None, exc, tick)
+        finally:
+            self._in_flight.discard(into)
+        return Receipt(ReceiptStatus.PRODUCED, into, composition, output, None, tick)
 
     def tick(self, id: str) -> AbstractContextManager[TickScope]:
         """Open an atomic group of composes: ``with store.tick("t") as tx:``.
