@@ -14,6 +14,7 @@ Variable order and enumeration order (used by ``models``, ``truth_table``,
 """
 from __future__ import annotations
 
+import itertools
 from typing import Iterable, Iterator, Mapping
 
 from dsdk.core import Judgment, Status  # noqa: F401  (A1 builds on A0's kernel)
@@ -165,6 +166,12 @@ def evaluate_partial(f: Formula, assignment: Mapping[str, bool]) -> Judgment:
     return Judgment(Status.KNOWN, value, "")
 
 
+def _assignments(names: list[str]) -> Iterator[dict[str, bool]]:
+    """Yield every assignment over ``names`` (already sorted) in module enumeration order, each a fresh dict."""
+    for combo in itertools.product([False, True], repeat=len(names)):
+        yield dict(zip(names, combo))
+
+
 def models(f: Formula, over: Iterable[str] | None = None) -> Iterator[dict[str, bool]]:
     """Lazily yield every assignment over ``over`` that makes ``f`` true.
 
@@ -178,25 +185,39 @@ def models(f: Formula, over: Iterable[str] | None = None) -> Iterator[dict[str, 
     * ``models(Const(True))`` yields one empty dict ``{}``;
       ``models(Const(False))`` yields nothing.
     """
-    raise NotImplementedError
+    if over is None:
+        names = sorted(variables(f))
+    else:
+        names = sorted(set(over))
+        missing = variables(f) - set(names)
+        if missing:
+            raise ValueError(f"'over' is missing variables of the formula: {', '.join(sorted(missing))}")
+
+    def _gen() -> Iterator[dict[str, bool]]:
+        for assignment in _assignments(names):
+            if evaluate(f, assignment):
+                yield assignment
+
+    return _gen()
 
 
 def truth_table(f: Formula) -> list[tuple[dict[str, bool], bool]]:
     """All ``2**n`` rows ``(assignment, value)`` over ``sorted(variables(f))``,
     in the module's enumeration order, including falsifying rows.
     A ``Const``-only formula has exactly one row: ``({}, value)``."""
-    raise NotImplementedError
+    names = sorted(variables(f))
+    return [(assignment, evaluate(f, assignment)) for assignment in _assignments(names)]
 
 
 def is_satisfiable(f: Formula) -> bool:
     """True iff some assignment over ``variables(f)`` makes ``f`` true."""
-    raise NotImplementedError
+    return any(True for _ in models(f))
 
 
 def is_valid(f: Formula) -> bool:
     """True iff EVERY assignment makes ``f`` true (a tautology).
     Always equals ``not is_satisfiable(Not(f))``."""
-    raise NotImplementedError
+    return not is_satisfiable(Not(f))
 
 
 def entails(premises: Iterable[Formula], conclusion: Formula) -> bool:
@@ -209,7 +230,7 @@ def entails(premises: Iterable[Formula], conclusion: Formula) -> bool:
     * ``premises`` may be any iterable (including a one-shot generator);
       a lone ``Formula`` instead of an iterable of them is a ``TypeError``.
     """
-    raise NotImplementedError
+    return countermodel(premises, conclusion) is None
 
 
 def countermodel(premises: Iterable[Formula], conclusion: Formula) -> dict[str, bool] | None:
@@ -218,4 +239,9 @@ def countermodel(premises: Iterable[Formula], conclusion: Formula) -> dict[str, 
     and falsifies ``conclusion``; ``None`` if there is none.
     ``countermodel(p, c) is None`` iff ``entails(p, c)``. The returned dict has
     one key per variable in the union (not only those that matter)."""
-    raise NotImplementedError
+    premises = list(premises)
+    names = sorted(set().union(variables(conclusion), *(variables(p) for p in premises)))
+    for assignment in _assignments(names):
+        if all(evaluate(p, assignment) for p in premises) and not evaluate(conclusion, assignment):
+            return assignment
+    return None
