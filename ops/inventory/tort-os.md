@@ -1,4 +1,5 @@
 ## Latest
+- Planner recheck 2026-10-08: newest is codex/add-numpy-to-requirements (2025-06-04), docs-only over main.
 - Branch `main` (only remote branch on disk). The repo is at `/home/user/tort-os`, not under samuelpmahan. Last commit 2025-06-04, Samuel Mahan: "Rename context db module and fix style (#7)".
 
 ## Purpose

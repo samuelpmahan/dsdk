@@ -1,4 +1,5 @@
 ## Latest
+- Planner recheck 2026-10-08: newest is feature/user-admin-service (2025-08-07): schema refactor + test seed from partial real schools CSV (a candidate B1 ingestion fixture source).
 - Branch `main` (only remote branch on disk). Last commit 2025-08-02: "Use Poetry for dependency management".
 
 ## Purpose

@@ -1,4 +1,5 @@
 ## Latest
+- Planner recheck 2026-10-08: newest is master (2018-04-24); 'triggers' branch 2018-04-23 is older.
 - Branch `master` (only remote branch on disk). Last commit 2018-04-24, Jared Goodwin: "Fixed filter by brunch not working due to stray single quote". This is a 2018 course artifact with no later activity.
 
 ## Purpose

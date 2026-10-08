@@ -1,4 +1,5 @@
 ## Latest
+- Planner recheck 2026-10-08: newest is 12-school-district-directory (2025-07-19): repositories and aggregations.
 - Branch `main` (only remote branch on disk). Last commit 2025-07-15: "add Location and Address files (#15)".
 
 ## Purpose
