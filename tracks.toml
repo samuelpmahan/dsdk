@@ -1,0 +1,16 @@
+# Registry of SDK packages in curriculum order.
+# Every package must import at least `min_imports` distinct EARLIER packages and
+# may never import a LATER one. tests/test_reuse.py enforces this.
+# A waiver must say why; waivers are expected only at the very start.
+
+[packages."dsdk.core"]
+track = "A0"
+order = 0
+min_imports = 0
+waiver = "Kernel: the exchange format and PxC store everything else builds on."
+
+[packages."dsdk.logic"]
+track = "A1"
+order = 1
+min_imports = 1
+waiver = "Only dsdk.core exists before A1; from A2 onward the minimum is 2."
