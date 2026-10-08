@@ -50,14 +50,37 @@ Examples::
 """
 from __future__ import annotations
 
+import dataclasses
+import re
 from dataclasses import dataclass
+
+_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*", re.ASCII)
+_RESERVED = ("true", "false")
+_BINARY_OPS = {"And": " & ", "Or": " | ", "Implies": " -> ", "Iff": " <-> "}
 
 
 class Formula:
     """Base class of all formula nodes. Never instantiate directly."""
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        cls = type(self)
+        if cls is Const:
+            if type(self.value) is not bool:
+                raise TypeError(f"Const.value must be bool, got {type(self.value).__name__}")
+        elif cls is Var:
+            if not isinstance(self.name, str):
+                raise TypeError(f"Var.name must be str, got {type(self.name).__name__}")
+            if self.name in _RESERVED or _NAME_RE.fullmatch(self.name) is None:
+                raise ValueError(f"invalid variable name: {self.name!r}")
+        else:
+            for field in dataclasses.fields(self):
+                if not isinstance(getattr(self, field.name), Formula):
+                    raise TypeError(f"{cls.__name__}.{field.name} must be a Formula")
+
+
+def _require_formula(f: object) -> None:
+    if not isinstance(f, Formula):
+        raise TypeError(f"expected a Formula, got {type(f).__name__}")
 
 
 @dataclass(frozen=True)
@@ -104,7 +127,19 @@ def variables(f: Formula) -> frozenset[str]:
 
     ``TypeError`` if ``f`` is not a :class:`Formula`.
     """
-    raise NotImplementedError
+    _require_formula(f)
+    names: set[str] = set()
+    todo: list[Formula] = [f]
+    while todo:
+        node = todo.pop()
+        if isinstance(node, Var):
+            names.add(node.name)
+        elif isinstance(node, Not):
+            todo.append(node.operand)
+        elif isinstance(node, (And, Or, Implies, Iff)):
+            todo.append(node.left)
+            todo.append(node.right)
+    return frozenset(names)
 
 
 def size(f: Formula) -> int:
@@ -114,9 +149,45 @@ def size(f: Formula) -> int:
     ``size(And(x, y)) == 1 + size(x) + size(y)`` (same for Or/Implies/Iff).
     Repeated sub-formulas are counted each time: ``size(And(a, a)) == 3``.
     """
-    raise NotImplementedError
+    _require_formula(f)
+    count = 0
+    todo: list[Formula] = [f]
+    while todo:
+        node = todo.pop()
+        count += 1
+        if isinstance(node, Not):
+            todo.append(node.operand)
+        elif isinstance(node, (And, Or, Implies, Iff)):
+            todo.append(node.left)
+            todo.append(node.right)
+    return count
 
 
 def to_str(f: Formula) -> str:
     """Canonical string per the grammar in the module docstring."""
-    raise NotImplementedError
+    _require_formula(f)
+    results: list[str] = []
+    # (node, expanded): first visit pushes children, second visit combines their strings.
+    todo: list[tuple[Formula, bool]] = [(f, False)]
+    while todo:
+        node, expanded = todo.pop()
+        if isinstance(node, Const):
+            results.append("true" if node.value else "false")
+        elif isinstance(node, Var):
+            results.append(node.name)
+        elif not expanded:
+            todo.append((node, True))
+            if isinstance(node, Not):
+                todo.append((node.operand, False))
+            elif isinstance(node, (And, Or, Implies, Iff)):
+                todo.append((node.right, False))
+                todo.append((node.left, False))
+            else:
+                raise TypeError(f"unknown formula node: {type(node).__name__}")
+        elif isinstance(node, Not):
+            results.append("(~" + results.pop() + ")")
+        else:
+            right = results.pop()
+            left = results.pop()
+            results.append("(" + left + _BINARY_OPS[type(node).__name__] + right + ")")
+    return results[0]
