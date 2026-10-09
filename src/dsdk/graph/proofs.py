@@ -157,7 +157,39 @@ def unreachability_countermodel(g: Graph, source: Hashable, target: Hashable) ->
       with a reason starting ``"logic disagrees:"``. Larger graphs skip this step (``logic_countermodel=None``, ``cross_checked=False``).
     * ``unreachable`` is True iff ``reachable(g, source, target)`` is KNOWN False.
     """
-    raise NotImplementedError
+    if not isinstance(g, Graph):
+        raise TypeError(f"expected a Graph, got {type(g).__name__}")
+    missing = _missing(g, source, target)
+    if missing is not None:
+        return missing
+    reached = set(bfs(known_subgraph(g), source).distance)
+    if target in reached:
+        return Judgment(
+            Status.NOT_APPLICABLE, None,
+            f"no countermodel exists: {target!r} is reachable from {source!r} over KNOWN edges",
+        )
+    assignment = {f"n{i}": node in reached for i, node in enumerate(g.nodes)}
+    premises = (node_var(g, source),) + known_premises(g)
+    goal = node_var(g, target)
+    for f in premises:
+        if not evaluate(f, assignment):
+            return Judgment(Status.INVALID, None, f"countermodel failed its own check: premise {f!r} is false")
+    if evaluate(goal, assignment):
+        return Judgment(Status.INVALID, None, "countermodel failed its own check: target is true")
+    if len(g.nodes) <= MAX_ENUM_NODES:
+        logic_cm = countermodel(premises, goal)
+        if entails(premises, goal) or logic_cm is None:
+            return Judgment(Status.INVALID, None, "logic disagrees: no countermodel found by dsdk.logic for a non-entailed goal")
+        cross_checked = True
+    else:
+        logic_cm = None
+        cross_checked = False
+    verdict = reachable(g, source, target)
+    unreachable = verdict.status is Status.KNOWN and verdict.value is False
+    cm = Countermodel(
+        tuple(node for node in g.nodes if node in reached), assignment, premises, unreachable, logic_cm, cross_checked,
+    )
+    return Judgment(Status.KNOWN, cm, "")
 
 
 def entailed_by_known_edges(g: Graph, source: Hashable, target: Hashable) -> Judgment:
@@ -168,4 +200,11 @@ def entailed_by_known_edges(g: Graph, source: Hashable, target: Hashable) -> Jud
     ``"too many nodes to enumerate"`` (brute force would need 2**n assignments). Equals ``target in bfs(known_subgraph(g), source).distance``
     on every graph this function answers for.
     """
-    raise NotImplementedError
+    if not isinstance(g, Graph):
+        raise TypeError(f"expected a Graph, got {type(g).__name__}")
+    missing = _missing(g, source, target)
+    if missing is not None:
+        return missing
+    if len(g.nodes) > MAX_ENUM_NODES:
+        return Judgment(Status.UNKNOWN, None, f"too many nodes to enumerate: {len(g.nodes)} > {MAX_ENUM_NODES}")
+    return Judgment(Status.KNOWN, bool(entails((node_var(g, source),) + known_premises(g), node_var(g, target))), "")

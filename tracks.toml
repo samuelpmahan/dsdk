@@ -20,13 +20,11 @@ thin_owed = "only the kernel exists below logic; its verdict type is the whole d
 track = "A2"
 order = 2
 min_imports = 2
-owed_to = "dsdk.prob: probability queries written as text, parsed by the language package"
 
 [packages."dsdk.graph"]
 track = "A5"
 order = 3
 min_imports = 2
-thin_owed = "graph calls only the kernel's verdict and status types; owes a real use of logic or the kernel (e.g. witness paths recorded as Parts)"
 
 [packages."dsdk.worlds"]
 track = "W1"
