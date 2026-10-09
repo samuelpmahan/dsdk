@@ -1,0 +1,404 @@
+<title>dsdk Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a rack of instruments. Each instrument is a panel with a faceplate (name, track, world),
+   a working surface, and a "How do we know?" drawer. Single dark look by choice: stage gear. */
+:root{
+  --rack:#15131d; --panel:#1e1b2a; --panel-2:#272338; --rule:#3a3452;
+  --ink:#efe8da; --muted:#a89fbd; --amber:#ffb547; --amber-dim:#7a5a2a;
+  --safe:#5fd68f; --danger:#ff6b6b; --unknown:#9aa3ff; --wumpus:#ff9ad5;
+  --display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--rack);color:var(--ink)}
+body{font-family:var(--body);font-size:16px;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:16px;padding-block:28px 56px;display:grid;gap:28px}
+a{color:var(--amber)}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.01em}
+.mast{display:grid;gap:12px}
+.mast h1{font-size:clamp(44px,8vw,84px);font-weight:800;line-height:.9;text-transform:uppercase}
+.mast h1 span{color:var(--amber)}
+.mast p{margin:0;max-width:62ch;color:var(--muted)}
+.worlds{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-family:var(--mono);font-size:12px;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--rule);border-radius:999px;padding:4px 10px;display:inline-flex;gap:6px;align-items:center;color:var(--muted)}
+.led{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.led.on{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.led.build{background:var(--unknown)}
+.instrument{background:var(--panel);border:1px solid var(--rule);border-radius:6px;display:grid}
+.face{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--rule);background:linear-gradient(var(--panel-2),var(--panel))}
+.face h2{font-size:32px;font-weight:800;text-transform:uppercase}
+.face .meta{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.surface{padding:18px;display:grid;gap:18px}
+.surface>*,.wrap>*,.instrument>*{min-width:0}
+.lede{margin:0;max-width:68ch;color:var(--muted)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select,input{font:inherit;font-size:14px;color:var(--ink);background:var(--panel-2);border:1px solid var(--rule);border-radius:4px;padding:7px 12px}
+button{cursor:pointer}
+button:hover{border-color:var(--amber)}
+button.primary{background:var(--amber);color:#1b1408;border-color:var(--amber);font-weight:700}
+input[type=number]{width:6.5em}
+label.inline{display:inline-flex;gap:6px;align-items:center;font-size:14px;color:var(--muted)}
+.cave-row{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:760px){.cave-row{grid-template-columns:minmax(0,1fr)}}
+.cave{display:grid;grid-template-columns:auto repeat(4,1fr);gap:4px;max-width:340px}
+.axis{font-family:var(--mono);font-size:11px;color:var(--muted);display:grid;place-items:center}
+.cell{aspect-ratio:1;max-width:100%;border:1px solid var(--rule);border-radius:4px;background:var(--rack);color:var(--ink);padding:4px;display:grid;grid-template-rows:auto 1fr auto;font-family:var(--mono);font-size:11px;text-align:left;position:relative}
+.cell .xy{color:var(--muted)}
+.cell .mark{align-self:center;justify-self:center;font-family:var(--display);font-size:22px;font-weight:800}
+.cell .tags{display:flex;gap:3px;flex-wrap:wrap}
+.cell .tag{font-size:10px;padding:0 3px;border-radius:2px;background:var(--panel-2)}
+.cell.visited{background:var(--panel-2)}
+.cell.safe{border-color:var(--safe);box-shadow:inset 0 0 0 1px var(--safe)}
+.cell.pit{border-color:var(--danger)}
+.cell.wum{border-color:var(--wumpus)}
+.cell.unknown{border-style:dashed;border-color:var(--unknown)}
+.cell.agent::after{content:"";position:absolute;inset:-3px;border:2px solid var(--amber);border-radius:6px;pointer-events:none}
+.cell[aria-pressed=true]{outline:2px solid var(--ink);outline-offset:1px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--muted)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:2px;border:2px solid;vertical-align:-1px;margin-right:4px}
+.readout{display:grid;gap:12px;min-width:0}
+.stats{display:flex;flex-wrap:wrap;gap:6px 18px;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
+.stats b{color:var(--amber);font-weight:600}
+.why{background:var(--rack);border:1px solid var(--rule);border-radius:4px;padding:12px;display:grid;gap:8px;min-width:0}
+.why h3{font-size:20px;font-weight:600}
+.verdict{font-family:var(--mono);font-size:13px;display:grid;gap:4px}
+.verdict code,.kb code{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere;color:var(--ink)}
+.ok{color:var(--safe)} .no{color:var(--danger)} .meh{color:var(--unknown)}
+.kb{max-height:160px;overflow:auto;font-size:12px;display:grid;gap:2px}
+ol.log{margin:0;padding-left:20px;font-size:14px;max-height:180px;overflow:auto;display:grid;gap:2px}
+details.how{border-top:1px solid var(--rule)}
+details.how summary{cursor:pointer;padding:12px 18px;font-family:var(--mono);font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--amber)}
+details.how .body{padding:0 18px 18px;display:grid;gap:10px;font-size:14px}
+.ev{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:4px 16px}
+@media (max-width:560px){.ev{grid-template-columns:minmax(0,1fr)}}
+.ev dt{color:var(--muted)} .ev dd{margin:0;font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--rack);border:1px solid var(--rule);border-radius:4px;padding:10px 12px;display:grid;gap:2px}
+.tile .k{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tile .v{font-family:var(--display);font-size:34px;font-weight:800;font-variant-numeric:tabular-nums}
+.tile .s{font-size:12px;color:var(--muted)}
+.chart{overflow-x:auto}
+.chart svg{display:block;min-width:560px;width:100%;height:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:400}
+.tablewrap{overflow-x:auto}
+.soon{display:grid;gap:10px}
+.bignum{display:flex;flex-wrap:wrap;gap:8px 26px;font-family:var(--mono);font-size:13px;color:var(--muted)}
+.bignum b{display:block;font-family:var(--display);font-size:30px;color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums}
+footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 18px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <h1>dsdk <span>Lab</span></h1>
+    <p>Instruments built by agents, checked by other agents, run on your worlds. Every result opens a drawer that says how we know it.</p>
+    <div class="worlds" aria-label="Worlds">
+      <span class="chip"><span class="led on"></span>Wumpus cave · live</span>
+      <span class="chip"><span class="led on"></span>The build · live</span>
+      <span class="chip"><span class="led build"></span>Lost Lands 2018 · instrument in build</span>
+    </div>
+  </header>
+
+  <!-- ============ A1: Logic Cave ============ -->
+  <section class="instrument" id="cave" aria-labelledby="cave-h">
+    <div class="face"><h2 id="cave-h">Logic Cave</h2><span class="meta">Track A1 · logic &amp; proof · Wumpus</span></div>
+    <div class="surface">
+      <p class="lede">A Wumpus agent that only moves where logic proves it is safe. It writes what it perceives as propositional rules, then asks <code>entails</code> about every frontier square. Click any square to see the exact question and, when the answer is no, a world where it would die.</p>
+      <div class="controls">
+        <label class="inline" for="cave-pick">Cave
+          <select id="cave-pick"><option value="demo">Demo cave (your fixture)</option><option value="seed">Random cave</option></select>
+        </label>
+        <label class="inline" for="cave-seed">Seed <input id="cave-seed" type="number" value="7" min="1" step="1"></label>
+        <button id="cave-reset" type="button">New run</button>
+        <button id="cave-step" type="button" class="primary">Step</button>
+        <button id="cave-run" type="button">Run to end</button>
+        <label class="inline" for="cave-reveal"><input id="cave-reveal" type="checkbox"> Reveal the true cave</label>
+      </div>
+      <div class="cave-row">
+        <div style="display:grid;gap:10px;min-width:0">
+          <div class="cave" id="cave-grid" role="grid" aria-label="Cave, 4 by 4"></div>
+          <div class="legend">
+            <span><span class="sw" style="border-color:var(--safe)"></span>proved safe</span>
+            <span><span class="sw" style="border-color:var(--unknown);border-style:dashed"></span>not provable</span>
+            <span><span class="sw" style="border-color:var(--danger)"></span>proved pit</span>
+            <span><span class="sw" style="border-color:var(--wumpus)"></span>proved wumpus</span>
+            <span><span class="sw" style="border-color:var(--amber)"></span>agent</span>
+          </div>
+        </div>
+        <div class="readout">
+          <div class="stats" id="cave-stats"></div>
+          <div class="why" id="cave-why" aria-live="polite"></div>
+          <div><h3 style="font-size:18px">Agent log</h3><ol class="log" id="cave-log"></ol></div>
+        </div>
+      </div>
+    </div>
+    <details class="how">
+      <summary>How do we know?</summary>
+      <div class="body">
+        <p style="margin:0">The page runs the same JavaScript logic engine that is held to the Python-verified fixtures. Pit facts and Wumpus facts share no variables, so each square is two separate entailment checks: the knowledge base must prove "no pit here" and "no Wumpus here". The agent is sound but deliberately incomplete. It does not assume exactly one Wumpus, and it never gambles. When nothing is provable it climbs out, and that gap is what the probability track (A3) will fill.</p>
+        <div class="controls"><button id="sweep" type="button">Run the soundness sweep here (300 random caves)</button><span id="sweep-out" class="stats" aria-live="polite"></span></div>
+        <dl class="ev" id="ev-a1"></dl>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ The build ============ -->
+  <section class="instrument" id="build" aria-labelledby="build-h">
+    <div class="face"><h2 id="build-h">Build Observatory</h2><span class="meta">Preview of B2 &amp; C4 · the build itself</span></div>
+    <div class="surface">
+      <p class="lede">dsdk studies the agents building it. Each dot is one agent attempt from the ledger. Sonnet writes contracts and audits, and Haiku implements against them with two tries per card.</p>
+      <div class="tiles" id="build-tiles"></div>
+      <div class="chart" id="build-chart"></div>
+      <div><h3 style="font-size:20px;margin-bottom:6px">Where Haiku slipped</h3><div class="tablewrap"><table id="limits"><thead><tr><th>Task</th><th>What happened</th><th>What changed</th></tr></thead><tbody></tbody></table></div></div>
+    </div>
+    <details class="how">
+      <summary>How do we know?</summary>
+      <div class="body">
+        <p style="margin:0">Every number comes from <code>ops/ledger.jsonl</code>, which is appended after the planner re-runs each claimed result. Intervals are Wilson 95% intervals computed in this page. Once the probability track lands, they will come from <code>dsdk.prob</code>, and the two will be checked against each other.</p>
+        <dl class="ev" id="ev-build"></dl>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ Lost Lands ============ -->
+  <section class="instrument" id="lostlands" aria-labelledby="ll-h">
+    <div class="face"><h2 id="ll-h">Six Degrees of Dubstep</h2><span class="meta">Track A5 · graphs · Lost Lands 2018</span></div>
+    <div class="surface soon">
+      <p class="lede">Pick any two tracks from your Lost Lands 2018 sets and get the shortest chain of real back-to-back transitions between them, with the DJ who made each hop. If the only route needs an inferred link (two tracks in the same set but not adjacent), the answer is marked unproven rather than true. Manager W is building it now.</p>
+      <div class="bignum" id="ll-counts"></div>
+    </div>
+    <details class="how">
+      <summary>How do we know?</summary>
+      <div class="body"><dl class="ev" id="ev-ll"></dl></div>
+    </details>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const LAB = /*@DATA@*/null;
+/*@LOGIC@*/
+
+// ---------- helpers ----------
+const $ = (s, r=document) => r.querySelector(s);
+const el = (tag, attrs={}, ...kids) => { const n=document.createElement(tag); for (const [k,v] of Object.entries(attrs)) { if (k==='class') n.className=v; else if (k==='text') n.textContent=v; else n.setAttribute(k,v);} for (const k of kids) n.append(k); return n; };
+const V = (name) => ({op:'var', name});
+const NOT = (f) => ({op:'not', operand:f});
+const AND = (fs) => fs.length===0 ? {op:'const',value:true} : fs.reduce((a,b)=>({op:'and',left:a,right:b}));
+const OR = (fs) => fs.length===0 ? {op:'const',value:false} : fs.reduce((a,b)=>({op:'or',left:a,right:b}));
+function fillEv(id, rows){ const dl=$(id); dl.replaceChildren(); for (const [k,v] of rows){ dl.append(el('dt',{text:k}), el('dd',{text:v})); } }
+function wilson(k,n){ if(!n) return [0,0]; const z=1.96, p=k/n, d=1+z*z/n, c=p+z*z/(2*n), m=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n)); return [(c-m)/d,(c+m)/d]; }
+
+// ---------- Logic Cave ----------
+const N = 4;
+const key = (x,y) => `${x},${y}`;
+const parse = (k) => k.split(',').map(Number);
+const nbrs = (k) => { const [x,y]=parse(k); return [[x-1,y],[x+1,y],[x,y-1],[x,y+1]].filter(([a,b])=>a>=1&&a<=N&&b>=1&&b<=N).map(([a,b])=>key(a,b)); };
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function demoCave(){ return { name:'Demo cave', pits:new Set(['3,1','1,3','3,4']), wumpus:'4,4', gold:'3,3' }; }
+function seededCave(seed){
+  const r=mulberry32(seed), cells=[]; for(let y=1;y<=N;y++) for(let x=1;x<=N;x++) if(!(x===1&&y===1)) cells.push(key(x,y));
+  const pits=new Set(cells.filter(()=>r()<0.2));
+  const wumpus=cells[Math.floor(r()*cells.length)], gold=cells[Math.floor(r()*cells.length)];
+  return { name:`Random cave #${seed}`, pits, wumpus, gold };
+}
+let cave, agent;
+function percept(k){ return { breeze:nbrs(k).some(n=>cave.pits.has(n)), stench: cave.wumpus===k || nbrs(k).includes(cave.wumpus), glitter: cave.gold===k && !agent.hasGold }; }
+function resetCave(){
+  cave = $('#cave-pick').value==='demo' ? demoCave() : seededCave(Math.max(1, parseInt($('#cave-seed').value,10)||1));
+  agent = { pos:'1,1', visited:new Set(['1,1']), percepts:new Map(), hasGold:false, steps:0, done:false, outcome:'', log:[] };
+  agent.percepts.set('1,1', percept('1,1'));
+  logLine(`Enters ${cave.name} at (1,1). Perceives ${describe(agent.percepts.get('1,1'))}.`);
+  selected = null; think(); render();
+}
+function describe(p){ const s=[p.breeze&&'a breeze',p.stench&&'a stench',p.glitter&&'glitter'].filter(Boolean); return s.length? s.join(' and ') : 'nothing'; }
+function logLine(t){ agent.log.push(t); }
+
+// Knowledge base restricted to frontier variables: visited squares are known pit-free and wumpus-free (the agent survived them).
+function kb(){
+  const pit=[], wum=[];
+  for (const v of agent.visited){
+    const p=agent.percepts.get(v), open=nbrs(v).filter(n=>!agent.visited.has(n));
+    if (p.breeze) pit.push(OR(open.map(n=>V('P'+n.replace(',','')))));
+    else for (const n of open) pit.push(NOT(V('P'+n.replace(',',''))));
+    if (p.stench) wum.push(OR(open.map(n=>V('W'+n.replace(',','')))));
+    else for (const n of open) wum.push(NOT(V('W'+n.replace(',',''))));
+  }
+  return {pit, wum};
+}
+function frontier(){ const f=new Set(); for(const v of agent.visited) for(const n of nbrs(v)) if(!agent.visited.has(n)) f.add(n); return [...f].sort(); }
+let verdicts = new Map();
+function firstModel(premises, extra){ const f=AND([...premises, extra]); const m=models(f); return m.length? m[0] : null; }
+function think(){
+  verdicts = new Map(); const {pit,wum}=kb();
+  for (const c of frontier()){
+    const P=V('P'+c.replace(',','')), W=V('W'+c.replace(',',''));
+    const noPit = entails(pit, NOT(P)), noWum = entails(wum, NOT(W));
+    const isPit = entails(pit, P), isWum = entails(wum, W);
+    verdicts.set(c, {noPit, noWum, isPit, isWum, safe:noPit&&noWum, P, W});
+  }
+}
+function pathTo(target, allowed){
+  const prev=new Map([[agent.pos,null]]), q=[agent.pos];
+  while(q.length){ const u=q.shift(); if(u===target) break; for(const n of nbrs(u)) if(!prev.has(n) && (allowed.has(n)||n===target)){ prev.set(n,u); q.push(n);} }
+  if(!prev.has(target)) return null; const path=[]; for(let u=target;u!==null;u=prev.get(u)) path.unshift(u); return path;
+}
+function step(){
+  if (agent.done) return;
+  const here=agent.percepts.get(agent.pos);
+  if (here.glitter){ agent.hasGold=true; agent.percepts.set(agent.pos, percept(agent.pos)); logLine(`Grabs the gold at (${agent.pos}).`); render(); return; }
+  if (agent.hasGold){ goHome('Heads home with the gold'); return; }
+  const safe=[...verdicts.entries()].filter(([,v])=>v.safe).map(([c])=>c);
+  if (!safe.length){ goHome('No frontier square is provably safe. A logic-only agent will not gamble, so it'); return; }
+  let best=null; for(const c of safe){ const p=pathTo(c, agent.visited); if(p && (!best || p.length<best.length)) best=p; }
+  const target=best[best.length-1];
+  agent.steps += best.length-1; agent.pos=target; agent.visited.add(target);
+  if (cave.pits.has(target) || cave.wumpus===target){ agent.done=true; agent.outcome='died'; logLine(`Moved to (${target}) and died. This should be impossible: the proof was wrong.`); render(); return; }
+  const p=percept(target); agent.percepts.set(target,p);
+  logLine(`Proved (${target}) safe and moved there (${best.length-1} step${best.length===2?'':'s'}). Perceives ${describe(p)}.`);
+  think(); render();
+}
+function goHome(why){
+  const p=pathTo('1,1', agent.visited); agent.steps += p.length-1; agent.pos='1,1'; agent.done=true;
+  agent.outcome = agent.hasGold ? 'escaped with gold' : 'climbed out empty-handed';
+  logLine(`${why} walks back to (1,1) and climbs out (${p.length-1} step${p.length===2?'':'s'}).`); render();
+}
+let selected=null;
+function cellState(k){
+  if (agent.visited.has(k)) return 'visited';
+  const v=verdicts.get(k); if(!v) return 'far';
+  if (v.isPit) return 'pit'; if (v.isWum) return 'wum'; if (v.safe) return 'safe'; return 'unknown';
+}
+let quiet=false;
+function render(){
+  if (quiet) return;
+  const g=$('#cave-grid'); g.replaceChildren(); const reveal=$('#cave-reveal').checked;
+  for (let y=N;y>=1;y--){
+    g.append(el('div',{class:'axis',text:String(y)}));
+    for (let x=1;x<=N;x++){
+      const k=key(x,y), st=cellState(k);
+      const b=el('button',{type:'button',class:'cell '+({visited:'visited',safe:'safe',pit:'pit',wum:'wum',unknown:'unknown'}[st]||''),'aria-pressed':String(selected===k),'aria-label':`Square ${x},${y}: ${st}`});
+      if (agent.pos===k) b.classList.add('agent');
+      const tags=el('span',{class:'tags'});
+      const p=agent.percepts.get(k);
+      if (p){ if(p.breeze) tags.append(el('span',{class:'tag',text:'B'})); if(p.stench) tags.append(el('span',{class:'tag',text:'S'})); if(p.glitter) tags.append(el('span',{class:'tag',text:'G'})); }
+      let mark='';
+      if (reveal){ if(cave.pits.has(k)) mark='P'; else if(cave.wumpus===k) mark='W'; else if(cave.gold===k && !agent.hasGold) mark='$'; }
+      if (agent.pos===k) mark = mark || '@';
+      b.append(el('span',{class:'xy',text:`${x},${y}`}), el('span',{class:'mark',text:mark}), tags);
+      b.addEventListener('click',()=>{ selected=k; render(); });
+      g.append(b);
+    }
+  }
+  g.append(el('div'),...[1,2,3,4].map(x=>el('div',{class:'axis',text:String(x)})));
+  const fr=frontier(), proved=fr.filter(c=>verdicts.get(c)?.safe).length;
+  const score = -agent.steps + (agent.outcome==='escaped with gold'?1000:0) + (agent.outcome==='died'?-1000:0);
+  $('#cave-stats').replaceChildren(...[['Steps',agent.steps],['Visited',agent.visited.size+'/16'],['Frontier proved safe',`${proved}/${fr.length}`],['Gold',agent.hasGold?'carried':'not yet'],['Status',agent.done?agent.outcome:'exploring'],['Score',agent.done?score:'–']].map(([k,v])=>el('span',{},k+' ',el('b',{text:String(v)}))));
+  const log=$('#cave-log'); log.replaceChildren(...agent.log.map(t=>el('li',{text:t}))); log.scrollTop=log.scrollHeight;
+  $('#cave-step').disabled=agent.done; $('#cave-run').disabled=agent.done;
+  renderWhy();
+}
+function renderWhy(){
+  const w=$('#cave-why'); w.replaceChildren();
+  const k = selected || (frontier()[0] ?? agent.pos);
+  const [x,y]=parse(k);
+  w.append(el('h3',{text:`Square (${x},${y})`}));
+  const {pit,wum}=kb();
+  if (agent.visited.has(k)){ w.append(el('p',{style:'margin:0',text:`Visited. The agent stood here and perceived ${describe(agent.percepts.get(k))}, so it is known pit-free and Wumpus-free.`})); }
+  else if (!verdicts.has(k)){ w.append(el('p',{style:'margin:0',text:'Not adjacent to anywhere the agent has been, so it never appears in the knowledge base. Nothing can be proved about it yet.'})); }
+  else {
+    const v=verdicts.get(k);
+    const line=(q,ok,label)=>el('div',{},el('code',{text:`KB ⊨ ${q}`}),' → ',el('span',{class:ok?'ok':'meh',text:ok?'proved':'not entailed'}),` ${label}`);
+    const ver=el('div',{class:'verdict'});
+    ver.append(line(toStr(NOT(v.P)),v.noPit,'(no pit)'), line(toStr(NOT(v.W)),v.noWum,'(no Wumpus)'));
+    if (v.isPit) ver.append(el('div',{class:'no',text:`KB ⊨ ${toStr(v.P)}: a pit is certain here.`}));
+    if (v.isWum) ver.append(el('div',{class:'no',text:`KB ⊨ ${toStr(v.W)}: the Wumpus is certain here.`}));
+    w.append(ver);
+    if (!v.safe){
+      const cm = !v.noPit ? firstModel(pit, v.P) : firstModel(wum, v.W);
+      const what = !v.noPit ? 'a pit' : 'the Wumpus';
+      if (cm){ const tr=Object.entries(cm).filter(([,b])=>b).map(([n])=>n).join(', ')||'none'; w.append(el('p',{style:'margin:0',text:`Countermodel: a world consistent with everything perceived where ${what} is here. True variables: ${tr}.`})); }
+    } else w.append(el('p',{class:'ok',style:'margin:0',text:'Every world consistent with the percepts has this square empty.'}));
+  }
+  const kbBox=el('div',{class:'kb'}); const all=[...pit.map(f=>['pits',f]),...wum.map(f=>['wumpus',f])];
+  kbBox.append(el('div',{style:'color:var(--muted)',text:`Knowledge base: ${all.length} sentences over frontier variables`}));
+  for (const [t,f] of all) kbBox.append(el('code',{text:`${t}: ${toStr(f)}`}));
+  w.append(kbBox);
+}
+$('#cave-reset').addEventListener('click', resetCave);
+$('#cave-pick').addEventListener('change', resetCave);
+$('#cave-seed').addEventListener('change', ()=>{ $('#cave-pick').value='seed'; resetCave(); });
+$('#cave-step').addEventListener('click', step);
+$('#cave-run').addEventListener('click', ()=>{ let guard=64; while(!agent.done && guard--) step(); });
+$('#cave-reveal').addEventListener('change', render);
+function sweep(n){
+  const keep={cave,agent,verdicts,selected}; quiet=true; let died=0, gold=0, empty=0, steps=0;
+  try{
+    for(let s=1;s<=n;s++){
+      cave=seededCave(s); agent={pos:'1,1',visited:new Set(['1,1']),percepts:new Map(),hasGold:false,steps:0,done:false,outcome:'',log:[]};
+      agent.percepts.set('1,1',percept('1,1')); think(); let g=80; while(!agent.done&&g--) step();
+      if(agent.outcome==='died') died++; else if(agent.outcome==='escaped with gold') gold++; else empty++; steps+=agent.steps;
+    }
+  } finally { quiet=false; ({cave,agent,verdicts,selected}=keep); }
+  return {n,died,gold,empty,steps};
+}
+$('#sweep').addEventListener('click',()=>{ const t0=performance.now(), r=sweep(300), ms=Math.round(performance.now()-t0);
+  $('#sweep-out').replaceChildren(...[['caves',r.n],['deaths',r.died],['escaped with gold',r.gold],['climbed out empty',r.empty],['time',ms+' ms']].map(([k,v])=>el('span',{},k+' ',el('b',{text:String(v)})))); });
+
+// ---------- Build Observatory ----------
+function renderBuild(){
+  const rows=LAB.ledger, by={};
+  for (const r of rows){ (by[r.model] ||= []).push(r); }
+  const tiles=$('#build-tiles');
+  for (const m of ['haiku','sonnet']){
+    const rs=by[m]||[], first=rs.filter(r=>r.attempt===1), ok=first.filter(r=>r.outcome==='pass').length;
+    const [lo,hi]=wilson(ok, first.length);
+    tiles.append(el('div',{class:'tile'}, el('span',{class:'k',text:`${m} first try`}), el('span',{class:'v',text:first.length?Math.round(100*ok/first.length)+'%':'–'}), el('span',{class:'s',text:`${ok} of ${first.length} · 95% interval ${Math.round(lo*100)}–${Math.round(hi*100)}%`})));
+  }
+  const wall=rows.reduce((s,r)=>s+(r.wall_s||0),0);
+  tiles.append(el('div',{class:'tile'}, el('span',{class:'k',text:'attempts logged'}), el('span',{class:'v',text:String(rows.length)}), el('span',{class:'s',text:`${Math.round(wall/60)} agent-minutes of work`})));
+  const tests=rows.reduce((s,r)=>s+(r.outcome==='pass'&&r.tests_passed?r.tests_passed:0),0);
+  tiles.append(el('div',{class:'tile'}, el('span',{class:'k',text:'tests turned green'}), el('span',{class:'v',text:tests.toLocaleString()}), el('span',{class:'s',text:'by Haiku passes, re-run by the planner'})));
+  // strip chart
+  const W=900, H=150, pad=60, t0=rows[0].ts, t1=rows[rows.length-1].ts, sx=t=>pad+(W-pad-20)*((t-t0)/Math.max(1,t1-t0));
+  const lane={haiku:55, sonnet:110}, col={pass:'var(--safe)', partial:'var(--amber)', fail:'var(--danger)', error:'var(--danger)'};
+  let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Agent attempts over time, by model and outcome">`;
+  for (const [m,y] of Object.entries(lane)) svg+=`<line x1="${pad}" x2="${W-10}" y1="${y}" y2="${y}" stroke="var(--rule)"/><text x="4" y="${y+4}" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="12">${m}</text>`;
+  for (const r of rows){ const y=lane[r.model]; if(!y) continue; const rad=Math.max(4,Math.min(12,Math.sqrt(r.wall_s||1)/4)); svg+=`<circle cx="${sx(r.ts).toFixed(1)}" cy="${y}" r="${rad.toFixed(1)}" fill="${col[r.outcome]||'var(--muted)'}" fill-opacity=".8"><title>${r.task} · ${r.model} attempt ${r.attempt} · ${r.outcome} · ${r.wall_s}s</title></circle>`; }
+  const hrs=((t1-t0)/3600).toFixed(1);
+  svg+=`<text x="${pad}" y="${H-8}" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="11">first attempt</text><text x="${W-10}" y="${H-8}" text-anchor="end" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="11">${hrs} h later · dot size = wall time · green pass, amber partial</text></svg>`;
+  $('#build-chart').innerHTML=svg;
+  const tb=$('#limits tbody'); for (const l of LAB.limits) tb.append(el('tr',{},el('td',{text:l.task}),el('td',{text:l.what}),el('td',{text:l.fix})));
+  fillEv('#ev-build',[['Source','ops/ledger.jsonl ('+rows.length+' rows)'],['Failure log','ops/haiku-limits.md ('+LAB.limits.length+' entries)'],['Verification','each Haiku pass is re-run by the planner before it is logged'],['Commit',LAB.git_sha]]);
+}
+
+// ---------- evidence + Lost Lands placeholder ----------
+function renderEvidence(){
+  const a=LAB.a1;
+  fillEv('#ev-a1',[
+    ['Python tests', `${a.tests.map(t=>t.target+' '+t.passed+' passed').join(' · ')}`],
+    ['JS logic parity', `${a.parity} fixture tests (node --test viewer/parity)`],
+    ['Browser evidence', `${a.capture.passed}/${a.capture.total} Chromium assertions · ${a.capture.browser}`],
+    ['Python vs JS cross-check', a.crosscheck],
+    ['Proofs (independent audits)', a.proofs],
+    ['Reproduce', 'tools/evidence/run.sh A1'],
+    ['Cave source', 'demo cave = EmbodiedWumpusWorld fixtures/demo.wumpus (wumpus 4,4 · gold 3,3 · pits 3,1 1,3 3,4)'],
+    ['Simplification', 'moves cost 1 per square and turning is not modelled. Scoring: +1000 for escaping with gold'],
+  ]);
+  const c=LAB.lostlands;
+  $('#ll-counts').replaceChildren(...[['tracks',c.tracks],['artists',c.artists],['DJ line-ups',c.selectorGroups],['back-to-back transitions',c.transitions],['plays',c.selections],['festival dates',c.dates]].map(([k,v])=>el('span',{},el('b',{text:v.toLocaleString()}),k)));
+  fillEv('#ev-ll',[['Source','jukebox@lab/composable-mining · data/lostlands-2018.jukebox.json.gz (derived store, no raw tracklists)'],['Counts','decoded by the planner; the instrument will verify the pinned SHA-256 and record provenance'],['Status','dsdk.worlds contract in progress (Manager W)']]);
+  $('#foot').replaceChildren(el('span',{text:'Built '+LAB.built_at}), el('span',{text:'commit '+LAB.git_sha.slice(0,12)}), el('span',{text:'branch claude/friendly-cray-zex2o8'}), el('a',{href:'https://github.com/samuelpmahan/dsdk/tree/claude/friendly-cray-zex2o8',text:'source'}));
+}
+
+renderEvidence(); renderBuild(); resetCave();
+</script>
