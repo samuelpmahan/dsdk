@@ -7,7 +7,8 @@ behind `mirror`, not only about the mathematical definitions.
 
 Every proof uses the same format: **claim, base case, inductive hypothesis, inductive step, conclusion.**
 For the loop and stack-machine proofs, "base case" is initialisation of the invariant and "inductive step" is
-maintenance across one iteration.
+maintenance across one iteration. Theorem 1.4 is the one exception: it is not itself an induction but a direct
+combination of two lemmas that are, so it states its premises instead of an inductive hypothesis.
 
 ---
 
@@ -76,18 +77,22 @@ iteration, and the loop exits when `m = 0`, i.e. `j = n`. No `break`/`continue`,
 is no other path.
 *Exit.* At exit `j = n`, so `I(n)` gives `total = S(n)`; the function returns `total`. QED.
 
+*Reliance on Python integers.* The invariant says `total` equals the mathematical integer `S(j)`. That is valid only because Python's `int` is
+arbitrary precision: `total += i` never overflows or wraps, so each `+=` is exact integer addition. (In a fixed-width language this
+lemma would need the extra hypothesis `S(n)` fits in the word size.) The same holds for `n + 1` in `range(1, n + 1)` and for the `//` in 1.4.
+
 ### 1.4 Theorem (the code): for every `int n >= 0`, `triangular(n) = n(n+1)/2`
 
 **Claim.** For every `int n >= 0`, the value returned by `triangular(n)` is `n(n+1)/2`, which is an integer equal to `n(n+1)//2`.
 
-**Base case (`n = 0`).** The checks pass (`type(0) is int`, `0 >= 0`), `range(1, 1)` is empty, so the loop body never runs and the function
-returns `0 = 0*1/2`. (This is also Lemma B with `n = 0`.)
+**Premises.** This theorem is not proved by a fresh induction; the inductions are inside Lemma A (arithmetic) and Lemma B (loop), each already
+proved for an arbitrary `int n >= 0`. The premises are exactly those two lemmas (and Fact E); no hypothesis about `n - 1` is used.
 
-**Inductive hypothesis.** No further induction is needed: the induction lives inside Lemma A (arithmetic) and Lemma B (loop).
-We take both as established for the fixed `n`.
-
-**Inductive step.** Combine them: by Lemma B the code returns `S(n)`; by Lemma A, `S(n) = n(n+1)/2`; by Fact E that quotient is an
+**Combination.** Fix an `int n >= 0`. By Lemma B the code returns `S(n)`; by Lemma A, `S(n) = n(n+1)/2`; by Fact E that quotient is an
 integer, and so equals `n(n+1)//2`.
+
+**Sanity check of the smallest case (`n = 0`, not needed for the proof).** The checks pass, `range(1, 1)` is empty, the loop body never runs and the
+function returns `0 = 0*1/2`, as the combination predicts.
 
 **Conclusion.** For all `int n >= 0` the code returns `n(n+1)/2`. For `n < 0` or non-`int` `n` it raises (`ValueError` /
 `TypeError`) and the formula makes no claim. QED.
@@ -102,15 +107,21 @@ integer, and so equals `n(n+1)//2`.
 ### 2.0 Scope: finite binary trees, and which equality is meant
 
 * **Trees.** A tree is a `Leaf(v)` (any value `v`) or a `Node(l, r)` with `l`, `r` trees. A **finite binary tree** is one obtained by finitely
-  many applications of these constructors. Every tree built by the code is finite: constructors take already-built children
-  (`Node.__post_init__` checks they are `Tree`), and the dataclasses are frozen, so no cycle can be created short of
-  `object.__setattr__` abuse, which is out of scope. Every statement below is for finite trees only. There is no empty tree.
-* **Equality.** "Equal" means **structural equality of trees**: same constructor at the root, equal children for `Node`, and for `Leaf`
-  the stored values compared by Python's `==` in the dataclass-generated way (a tuple comparison `(self.value,) == (other.value,)`,
-  which for each element tests identity first, then `==`).
+  many applications of these constructors. Every tree built by the code is finite: constructors take already-built children, and the
+  dataclasses are frozen, so no cycle can be created short of `object.__setattr__` abuse, which is out of scope. Every statement below is for finite
+  trees only. There is no empty tree.
+* **Code invariant relied on (sum type).** `Tree` is an abstract sum type with exactly two concrete variants, `Leaf` and `Node`: a bare `Tree()` raises
+  `TypeError`, and `Node.__post_init__` requires each child to be a `Leaf` or a `Node`. Hence every object reachable from a constructed tree by
+  `.left` / `.right` is a `Leaf` or a `Node`, never a bare `Tree` or a foreign subclass instance. (This invariant is established in
+  `src/dsdk/logic/structures.py`, not by this document; it is exactly what the "every tree is a `Leaf` or a `Node`" in the inductions below uses. Under
+  the earlier code, which accepted a bare `Tree()` child, `_fold` could reach its `TypeError` branch; AUDIT-2 N2.)
+* **Equality.** "Equal" means **structural equality of trees** as computed by the dataclass-generated `__eq__` of `Leaf` and `Node` (field-wise comparison
+  of the stored values / children). Its exact mechanism differs between Python versions (see 2.5) and the proof does not depend on the mechanism, only
+  on two properties verified there on both 3.12 and 3.13.
 * **Stronger relation used in the proof.** Write `t ~ u` ("same shape, same leaf objects") when either `t is u` (both `Leaf`, the identical object),
-  or both are `Node` with `t.left ~ u.left` and `t.right ~ u.right`. Then `t ~ u` implies `t == u` (shown in 2.5). The proof establishes
-  `~`, which is what makes the result survive leaf values whose `==` is odd.
+  or both are `Node` with `t.left ~ u.left` and `t.right ~ u.right`. Then `t ~ u` implies `t == u` (shown in 2.5). `~` is a mathematical relation: it is
+  decided by object identity and shape, runs no user `__eq__` and cannot raise. The proof establishes `~`, which is what makes the result survive
+  leaf values whose `==` is odd.
 
 ### 2.1 Definitions
 
@@ -121,10 +132,11 @@ Recursive mirror `M` (the mathematical definition; `M(Leaf)` returns the very sa
 
 Generic recursive fold `F_{a,c}` for functions `a` (leaf case) and `c` (node case), both pure and total on the values they receive:
 
-    F(Leaf x)    = a(x)
+    F(x)         = a(x)                 for x a Leaf object (the callback receives the Leaf object itself, not its stored value)
     F(Node(l,r)) = c(F(l), F(r))
 
-`M = F_{a,c}` with `a(x) = x` and `c(p, q) = Node(q, p)`. The code is `mirror(t) = _fold(t, lambda leaf: leaf, lambda left, right: Node(right, left))`.
+`M = F_{a,c}` with `a(x) = x` (x the Leaf object, so `M(Leaf(v))` is the Leaf, not `v`) and `c(p, q) = Node(q, p)`. Since `c` allocates a fresh `Node` on
+every call, "values" computed by `F` are objects; two evaluations of the same expression give `~`-related, not identical, results. The code is `mirror(t) = _fold(t, lambda leaf: leaf, lambda left, right: Node(right, left))`.
 
 ### 2.2 Lemma M (the recursive definition): for every finite tree `t`, `M(t)` is a tree and `M(M(t)) ~ t`
 
@@ -149,18 +161,23 @@ for all finite trees. QED.
 `_fold` keeps a work stack `W` (list of pairs `(x, flag)`, top = last) and a result stack `R`. Loop:
 pop `(cur, expanded)`; if `cur` is a `Leaf`, push `a(cur)` on `R`; if `cur` is a `Node` and `expanded`, pop `right_res` then `left_res` from `R`
 and push `c(left_res, right_res)`; if `cur` is a `Node` and not `expanded`, push `(cur, True)`, then `(cur.right, False)`, then `(cur.left, False)`
-on `W` (so the left child is on top and is processed first). A non-`Tree` at the root or as a child raises `TypeError`; for a well-formed finite tree this
-never happens (`Node.__post_init__` guarantees tree children), so that branch is unreachable here.
+on `W` (so the left child is on top and is processed first). A non-`Tree` at the root or as a child raises `TypeError`; for a finite tree in the sense of 2.0 this
+never happens: by the sum-type invariant cited in 2.0 every child is a `Leaf` or a `Node`, so the `else` branch is unreachable here.
 
 **Denotation of the machine state.** For a work stack `W = [w_1, ..., w_m]` (top `w_m`) and results `R`, let `D(W, R)` be the list obtained
 from `R` by processing `w_m, w_{m-1}, ..., w_1` in that order, where
 * processing `(x, False)` appends `F(x)`;
 * processing `(x, True)` removes the last two items `p, q` (`p` below `q`) and appends `c(p, q)`.
 
-**Claim (invariant `J`).** At the top of every loop test, (i) every frame `(x, True)` in `W` has `x` a `Node`, (ii) every frame `(x, False)` has `x` a tree, and
-(iii) `D(W, R)` is defined (no step of the denotation removes from a list with fewer than two items) and `D(W, R) = [F(t)]`.
+**Reading of `=` in `J`.** `D(W, R)` is evaluated symbolically: its items are expression terms built from `F`, `a`, `c` (e.g. `c(F(l), F(r))`), and `=` in (iii)
+is equality of those terms. The code's actual list `R` holds objects, each the evaluation of its term; since `c` creates fresh `Node` objects, an actual
+object equals the evaluation of its term only up to `~` (not identity), and `a` returns the Leaf object itself. The final result is therefore `~`-related to `F(t)`, which
+is all that 2.4 uses (and `F(t)` is itself defined by the same evaluation, so for `mirror` they are the same computation).
 
-**Base case (initialisation).** Initially `W = [(t, False)]`, `R = []`. (i), (ii) hold trivially since `t` is a tree (checked first by the `isinstance` test). `D(W, R)` = process `(t, False)` = `[F(t)]`. So `J` holds.
+**Claim (invariant `J`).** At the top of every loop test, (i) every frame `(x, True)` in `W` has `x` a `Node`, (ii) every frame `(x, False)` has `x` a `Leaf` or a `Node`, and
+(iii) `D(W, R)` is defined (no step of the denotation removes from a list with fewer than two items) and `D(W, R) = [F(t)]` (as terms).
+
+**Base case (initialisation).** Initially `W = [(t, False)]`, `R = []`. (i), (ii) hold trivially since `t` is a `Leaf` or `Node` (a tree, checked first by the `isinstance` test). `D(W, R)` = process `(t, False)` = `[F(t)]`. So `J` holds.
 
 **Inductive hypothesis.** `J` holds at the top of some iteration with `W` non-empty. Let `(cur, expanded)` be the popped top frame, `W0` the rest.
 
@@ -168,18 +185,19 @@ from `R` by processing `w_m, w_{m-1}, ..., w_1` in that order, where
 * *`cur` a `Leaf`.* (A `True` frame never holds a leaf, by (i).) The code sets `W' = W0`, `R' = R + [a(cur)] = R + [F(cur)]`, which equals "process `(cur, False)` on `R`". So `D(W', R') = D(W, R)`.
 * *`cur` a `Node`, `expanded` true.* The code pops two items (`right_res` last, `left_res` before) and appends `c(left_res, right_res)`, which is exactly processing `(cur, True)`. (Defined because `D` is defined, by (iii).) Same `D`.
 * *`cur = Node(l, r)`, `expanded` false.* The code sets `W' = W0 + [(cur, True), (r, False), (l, False)]` and `R' = R`. Processing the new top three frames in order (`(l,False)`, then `(r,False)`, then `(cur,True)`) turns `R` into `R + [F(l), F(r)]` and then into `R + [c(F(l), F(r))] = R + [F(cur)]`, the same as processing `(cur, False)`. So `D(W', R') = D(W, R)`.
-New frames: `(cur, True)` has a `Node` (i); `l`, `r` are trees (ii) because `Node.__post_init__` validated them. So (i)-(iii) hold again.
+New frames: `(cur, True)` has a `Node` (i); `l`, `r` are each a `Leaf` or a `Node` (ii) by the sum-type invariant of 2.0 (`Node.__post_init__` rejects anything else, and bare `Tree()` cannot be built). So (i)-(iii) hold again.
 
 **Conclusion (termination and exit).**
 *Termination.* Weight each frame: `w(x, False) = 2|x|`, `w(x, True) = 1`, where `|x|` is the number of vertices (leaves plus nodes) of the finite tree `x`, a positive integer. The measure `mu(W) = sum of frame weights` is a natural number. Each iteration strictly decreases it:
 leaf frame: `2 -> 0`; expanded node frame: `1 -> 0`; unexpanded node `cur = Node(l, r)` with `|cur| = 1 + |l| + |r|`: `2|cur| = 2 + 2|l| + 2|r|` is replaced by `1 + 2|l| + 2|r|`, a decrease of 1. A natural-number measure cannot decrease forever, so the loop terminates.
-*Exit.* The loop ends only with `W` empty; then `D([], R) = R`, so by (iii) `R = [F(t)]`, and `results[0] = F(t)`. QED.
+*Exit.* The loop ends only with `W` empty; then `D([], R) = R`, so by (iii) `R = [F(t)]` (as terms; as objects, `~`-related), and `results[0] = F(t)`. QED.
 
-### 2.4 Theorem (the code): for every finite tree `t`, `mirror(t)` is a tree and `mirror(mirror(t)) ~ t`, hence `mirror(mirror(t)) == t`
+### 2.4 Theorem (the code): for every finite tree `t`, `mirror(t)` is a tree and `mirror(mirror(t)) ~ t`; Corollary: `==` when the comparison completes
 
-**Claim.** For every finite binary tree `t`: `mirror(mirror(t)) == t` (structural equality), and indeed `mirror(mirror(t)) ~ t`.
+**Theorem (`~` form, total).** For every finite binary tree `t`: `mirror(t)` is a tree and `mirror(mirror(t)) ~ t`. This is the primary statement. It has no
+depth restriction: `mirror` is iterative (Lemma F) and `~` is a mathematical relation, so both sides are defined for every finite tree. (Compare AUDIT-2 N3.)
 
-**Base case (`t = Leaf(v)`).** `mirror(t) = _fold(t, ...) = F_{a,c}(Leaf(v)) = a(t) = t` by Lemma F, the very same object. Then `mirror(mirror(t)) = t`, so `~` (identical) and `==`.
+**Base case (`t = Leaf(v)`).** `mirror(t) = _fold(t, ...) = F_{a,c}(t) = a(t) = t` by Lemma F, the very same object. Then `mirror(mirror(t)) = t`, so `~` (identical).
 
 **Inductive hypothesis.** For the immediate subtrees `l`, `r`: `mirror(mirror(l)) ~ l` and `mirror(mirror(r)) ~ r`.
 
@@ -187,20 +205,50 @@ leaf frame: `2 -> 0`; expanded node frame: `1 -> 0`; unexpanded node `cur = Node
 so `mirror(t) = Node(mirror(r), mirror(l))` is a tree and
 `mirror(mirror(t)) = Node(mirror(mirror(l)), mirror(mirror(r))) ~ Node(l, r)` by the hypothesis, the same computation as Lemma M's step, now for the code. (Lemma M gives the same conclusion directly: `mirror(mirror(t)) = M(M(t)) ~ t`.)
 
-**Conclusion.** `mirror(mirror(t)) ~ t` for all finite binary trees, and by 2.5, `~` implies `==`. QED.
+**Conclusion.** `mirror(mirror(t)) ~ t` for all finite binary trees. QED.
 
-### 2.5 What the theorem says about `==` on leaf values (identity-preserving behaviour)
+**Corollary (`==` form, with a depth caveat).** For every finite binary tree `t`, *if the evaluation of `mirror(mirror(t)) == t` completes*, it returns `True`.
+Proof: `~` implies `==` (2.5). Caveat: dataclass `==` is recursive in the depth of the tree, so for deep trees the comparison itself raises `RecursionError`
+even though `mirror(mirror(t))` was computed correctly. Executed on both Python 3.12.3 and 3.13.16: two separately built left-leaning trees of depth 3000
+(`Node(Node(...), Leaf(0))`) compared with `==` raise `RecursionError` (limit 1000). So the unconditional statement "`mirror(mirror(t)) == t` for every finite tree" is
+false as a statement about evaluating `==` in Python; the true unconditional statement is the `~` theorem, and the `==` form holds whenever the tree depth is
+within the interpreter's recursion budget (roughly `sys.getrecursionlimit()` minus the current stack depth; the exact bound is interpreter-dependent and not proved here).
+
+### 2.5 `~` implies `==`, and what the theorem says about `==` on leaf values
 
 Lemma M/F show that `mirror` returns the **same leaf objects**: `_fold` hands the original `Leaf` object to `leaf(cur)`, and `lambda leaf: leaf` returns it unchanged. So every leaf of
 `mirror(mirror(t))` *is* a leaf of `t` at the same position, and `t ~ mirror(mirror(t))` holds with `is`, not merely `==`.
 
-Python's dataclass `==` on `Leaf` compares `(self.value,) == (other.value,)`, and tuple comparison tests identity before `==`. Hence two identical leaves compare equal even when
-`value.__eq__` is irreflexive (a `float('nan')` leaf, or a user class whose `__eq__` always returns `False`). `Node` equality compares `(left, right)` tuples the same way.
-So `t ~ u` implies `t == u` for all trees, and the theorem holds for such "always-unequal" leaves (this is what the audit's `check_edge.py` observed).
+**Claim: `t ~ u` implies `t == u`, on every supported Python version.** The mechanism of the generated `__eq__` differs, so the proof uses only two properties:
 
-What the theorem therefore **does** say: `mirror(mirror(t)) == t` under Python's identity-then-`==` structural comparison, for every finite tree and every kind of leaf value.
-What it does **not** say: it asserts nothing about `==` on leaf *values* being reflexive, symmetric or transitive; it does not say `Leaf(nan) == Leaf(nan)` for two distinct NaN objects
-(that is `False`); and it does not claim `mirror(t1) == mirror(t2)` whenever `t1 == t2` when leaf equality is irregular. The result relies on the leaf-identity preservation of
+* **(R) Reflexive on identical objects.** For `x` a `Leaf`, `x == x` is `True` even if `x.value` has an irreflexive `==`.
+* **(C) Compositional on `Node`.** `Node(l, r) == Node(l', r')` is `True` whenever `l == l'` and `r == r'` (it asks nothing else of the children).
+
+*Actual mechanism, verified by running snippets* (`@dataclass(frozen=True)`, `n = float('nan')`, `x = Leaf(n)`):
+
+| | Python 3.12.3 | Python 3.13.16 |
+|---|---|---|
+| `(n,) == (n,)` | `True` | `True` |
+| `Leaf(n) == Leaf(n)` (two distinct Leaf objects, same `n`) | `True` | **`False`** |
+| `x == x` | `True` | `True` |
+| `Node(x, x) == Node(x, x)` (distinct Nodes, shared leaf `x`) | `True` | `True` |
+| `BUILD_TUPLE` in `Leaf.__eq__` (`dis`) | present | absent |
+
+On 3.12 (and earlier) the generated `__eq__` compares the tuples `(self.value,) == (other.value,)`, and tuple comparison tests identity before `==`; the same for
+`Node` with `(left, right)`. On 3.13 the generated `__eq__` compares fields one by one with `==` (no tuple), preceded by a `self is other` shortcut.
+So the earlier description "dataclass `==` is a tuple comparison" is true for 3.12 only. (R) holds on both, via tuple element identity on 3.12 and
+the `self is other` shortcut on 3.13, as the `x == x` row shows. (C) holds on both: tuple comparison / field-wise comparison of the children.
+
+*Proof of the claim* by induction on the `~` derivation. If `t is u` and both are `Leaf`: (R). If both are `Node` with `t.left ~ u.left`, `t.right ~ u.right`: by induction
+the children are `==`, so (C) gives `t == u`. (Proof relies on (R) and (C) only; since `~` for `Leaf` demands the *identical* object, the weaker, version-dependent
+fact that two *distinct* Leaf objects with the same irreflexive value compare equal is never used. It is `True` on 3.12 and `False` on 3.13.)
+
+Hence the theorem holds for "always-unequal" leaves (a `float('nan')` leaf, or a user class whose `__eq__` always returns `False`), on both versions; this is what the audit's `check_edge.py` observed.
+
+What the theorem therefore **does** say: `mirror(mirror(t)) ~ t` for every finite tree and every kind of leaf value, and consequently `mirror(mirror(t)) == t` whenever that
+comparison completes (2.4, Corollary).
+What it does **not** say: it asserts nothing about `==` on leaf *values* being reflexive, symmetric or transitive; it does not say `Leaf(nan) == Leaf(nan)` for two distinct Leaf objects
+(that is `False` on 3.13, and for distinct NaN objects on every version); and it does not claim `mirror(t1) == mirror(t2)` whenever `t1 == t2` when leaf equality is irregular. The result relies on the leaf-identity preservation of
 `lambda leaf: leaf` in `mirror`; a variant that copied leaf values would need reflexive leaf `==` to keep the `==` form of the claim.
 
 *Where the tests fit:* the Hypothesis property `mirror o mirror = id` samples the claim; the proofs cover every finite tree and, via Lemma F, the iterative implementation.
@@ -245,3 +293,9 @@ an induction proof needs both a true base and a valid step, and each of the two 
 | P2: well-foundedness remark was informal | Replaced by explicit structural induction (Lemma M) and the numeric weight `mu` (Lemma F). |
 | P3: horses analogy was wrong ("same shape") | Reworded: horses has a true base and an invalid step (1 -> 2); the exhibit has a valid step and a false base. Broken exhibit kept unchanged otherwise. |
 | P3 minor: omitted base case never shown to fail | The false base is `Q(0)`: 0 vs 1, shown in "Where it fails" and stated to rule out any other base. |
+| **AUDIT-2 N1:** dataclass `==` described as `(self.value,)==(other.value,)`, false on Python 3.13 | 2.0 no longer names a mechanism. 2.5 rewritten: `~ => ==` is derived from two properties, (R) reflexive on identical objects and (C) compositional on `Node`, and a table of executed outputs on 3.12.3 and 3.13.16 shows the real mechanism (tuple compare on 3.12, field-wise plus `self is other` on 3.13; `Leaf(nan)==Leaf(nan)` is `True` / `False`). Conclusion `~ => ==` kept: it holds on both versions. |
+| **AUDIT-2 N2:** bare `Tree()` accepted as child (cross-reference) | Code fix is separate (`Tree` becomes abstract, children must be `Leaf` or `Node`). 2.0 now lists this as a "code invariant relied on"; Lemma F's unreachable-`else` claim and (ii) cite it and say `Leaf` or `Node`, not "tree". No `src` or tests edited here. |
+| **AUDIT-2 N3:** `==` form not total (RecursionError on deep trees) | 2.4 restated: primary Theorem in the `~` form (total, no depth limit); `==` is a Corollary "if the comparison completes", with the executed depth-3000 `RecursionError` on 3.12 and 3.13 and a statement that the exact bound is interpreter-dependent. |
+| **AUDIT-2 N4:** `F(Leaf x) = a(x)` notation; `=` in `J` is between terms | 2.1: `F(x) = a(x)` with `x` the Leaf object, and the note that `c` allocates fresh Nodes. Lemma F gets a "Reading of `=` in `J`" paragraph: equality of symbolic terms, actual objects `~`-related, not identical. Exit step says the same. |
+| **AUDIT-2 N5:** placeholder inductive hypothesis in 1.4 | 1.4 now lists its premises (Lemma A, Lemma B, Fact E) and a combination step; no fake hypothesis. The `n = 0` case is kept only as a labelled sanity check. Format note at the top updated. |
+| **AUDIT-2 N6:** reliance on unbounded Python ints unstated | 1.3 adds "Reliance on Python integers": `total += i`, `n + 1` and `//` are exact because `int` is arbitrary precision; a fixed-width language would need a no-overflow hypothesis. |

@@ -20,3 +20,4 @@
 {"ts": 1791505815, "task": "T27", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 120, "tests_passed": 473, "tests_total": 473, "round": 6, "note": "first pytest hit a venv race (pluggy missing) under concurrent uv run"}
 {"ts": 1791505827, "task": "T21", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 33, "tests_passed": 26, "tests_total": 26, "round": 6, "note": ""}
 {"ts": 1791505827, "task": "T24", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 20, "tests_passed": 13, "tests_total": 13, "round": 6, "note": ""}
+{"ts": 1791505878, "task": "proofs-A1-rev2", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 300, "tests_passed": null, "tests_total": null, "round": null, "note": "closed AUDIT-2 N1,N3-N6 with version-checked snippets"}
