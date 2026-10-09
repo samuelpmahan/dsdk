@@ -27,10 +27,9 @@ def hops_of(d):
     return [(h.source, h.target, h.evidence, h.count, h.sets) for h in d.hops]
 
 
-# ---------------------------------------------------------------------------------------------- toy, by hand
-
-
+# ==== Six degrees on the toy festival (answers derived by hand) ====
 def test_known_path_when_every_step_was_observed(toy):
+    """On the toy festival, going from track 0 to track 4 is KNOWN along 0, 1, 2, 3, 4, and each step reports how many times it was seen and in which DJ sets."""
     d = toy.query(0, 4)
     assert isinstance(d, Degrees) and d.path == (0, 1, 2, 3, 4)
     assert d.judgment == Judgment(Status.KNOWN, True, "known path: 0 -> 1 -> 2 -> 3 -> 4")
@@ -64,6 +63,7 @@ def test_inferred_path_is_unknown_and_names_the_inferred_steps(toy):
 
 
 def test_one_inferred_step_is_enough_to_lose_known(toy):
+    """Going from track 1 back to track 0 is UNKNOWN because the reverse move was never observed; the single step is inferred from the two sets that contain both tracks."""
     d = toy.query(1, 0)
     assert d.path == (1, 0) and d.judgment.reason == "uncertain edges on best candidate path: 1->0 (unknown)"
     assert d.hops == (Hop(1, 0, Status.UNKNOWN, 2, ((0, 0), (0, 1))),)  # 0 and 1 share TWO sets
@@ -86,6 +86,7 @@ def test_unplayed_track_is_unreachable_but_not_impossible(toy):
 
 
 def test_a_track_reaches_itself_with_the_empty_path(toy):
+    """A track reaches itself with the one-node path and no steps, KNOWN, even for a track that was never played."""
     for t in (3, 5):
         d = toy.query(t, t)
         assert d.judgment == Judgment(Status.KNOWN, True, f"known path: {t}") and d.path == (t,) and d.hops == ()
@@ -94,6 +95,7 @@ def test_a_track_reaches_itself_with_the_empty_path(toy):
 @pytest.mark.parametrize("src, dst, bad", [(0, 9, 9), (9, 0, 9), (-1, 0, -1), (0, 6, 6), (9, -1, 9), (True, 0, True),
                                           (0, False, False), ("0", 1, "0"), (None, 1, None), (0, 2.0, 2.0), (1.5, 1, 1.5)])
 def test_non_tracks_are_invalid_not_exceptions_and_name_the_first_bad_node(toy, src, dst, bad):
+    """Asking about something that is not a track (out of range, negative, a bool, a string, None, a float) returns an INVALID judgment naming the first bad node and never raises."""
     d = toy.query(src, dst)
     assert d.judgment.status is Status.INVALID and d.judgment.value is None
     assert d.judgment.reason == f"node {bad!r} is not in the graph"
@@ -102,11 +104,13 @@ def test_non_tracks_are_invalid_not_exceptions_and_name_the_first_bad_node(toy, 
 
 
 def test_invalid_unknown_and_known_false_are_three_different_answers(toy):
+    """An unknown track (INVALID), a never-played track (UNKNOWN) and a reachable track (KNOWN) give three different statuses."""
     answers = {toy.query(0, 9).judgment.status, toy.query(0, 5).judgment.status, toy.query(0, 4).judgment.status}
     assert answers == {Status.INVALID, Status.UNKNOWN, Status.KNOWN}
 
 
 def test_hop_lookup(toy):
+    """SixDegrees.hop(a, b) reports the evidence for one step: the count and sets for an observed move, the shared sets for an inferred one, and a clear ValueError when there is no such edge."""
     assert toy.hop(0, 1) == Hop(0, 1, Status.KNOWN, 2, ((0, 0), (0, 1)))
     assert toy.hop(1, 0) == Hop(1, 0, Status.UNKNOWN, 2, ((0, 0), (0, 1)))
     assert toy.hop(3, 4).count == 1 and toy.hop(4, 3).evidence is Status.KNOWN
@@ -117,23 +121,27 @@ def test_hop_lookup(toy):
 
 
 def test_index_exposes_the_graphs_it_searches(toy):
+    """The SixDegrees object exposes the graph it searches and its observed-only subgraph, and they have the same nodes and the expected 5 observed edges."""
     assert toy.graph.edges == six_degrees_graph(toy_world()).edges
     assert all(e.evidence is Status.KNOWN for e in toy.known.edges) and len(toy.known.edges) == 5
     assert toy.known.nodes == toy.graph.nodes
 
 
 def test_query_is_repeatable_and_does_not_mutate_the_index(toy):
+    """Asking every pair of toy tracks twice gives identical answers, so a query does not change the index."""
     first = [toy.query(a, b) for a in range(6) for b in range(6)]
     second = [toy.query(a, b) for a in range(6) for b in range(6)]
     assert first == second
 
 
 def test_six_degrees_convenience_matches_the_class():
+    """The one-shot six_degrees function returns the same answer as building a SixDegrees object and querying it."""
     w = toy_world()
     assert six_degrees(w, 4, 0) == SixDegrees(w).query(4, 0)
 
 
 def test_undated_set_sorts_first_in_hop_sets():
+    """When a step is evidenced by one dated set and one undated set, the undated one is listed first and both are counted."""
     doc = {
         "schema": "jukebox-primitives/v1",
         "meta": {"tracks": 2, "selectionEvents": 4, "transitionEvents": 2},
@@ -146,9 +154,7 @@ def test_undated_set_sorts_first_in_hop_sets():
     assert h.sets == ((0, None), (0, 0)) and h.count == 2 and h.evidence is Status.KNOWN
 
 
-# ---------------------------------------------------------------------------------------------- differential vs dsdk.graph
-
-
+# ==== The fast search gives the same answers as dsdk.graph reachability on 40 random worlds ====
 def random_world(seed):
     rng = random.Random(seed)
     n_tracks, n_groups, n_dates = rng.randint(2, 14), rng.randint(1, 3), rng.randint(1, 2)
@@ -192,9 +198,7 @@ def test_matches_dsdk_graph_reachable_on_random_worlds(seed):
                     assert h.evidence is g.get_edge(h.source, h.target).evidence
 
 
-# ---------------------------------------------------------------------------------------------- real corpus
-
-
+# ==== Six degrees on the real corpus, checked against the independent oracle ====
 def test_real_degrees_match_the_independent_script(real_degrees, slices):
     """47 pairs: known chains of 1-20+ hops, one-way pairs that need inferred edges, disconnected pairs, self pairs. The
     expected paths come from a different algorithm (Bellman-Ford + backward table), so a tie-break bug shows up here."""
@@ -224,9 +228,27 @@ def test_real_torque_to_babatunde_is_four_observed_hops(real_degrees, real_world
 
 
 def test_real_every_known_hop_comes_from_a_set_that_really_has_that_transition(real_degrees, real_world):
+    """For three real queries, every observed step cites sets in which those two tracks really are consecutive."""
     sets = real_world.sets()
     for pair in ((483, 237), (5, 900), (0, 1351)):
         for h in real_degrees.query(*pair).hops:
             for key in h.sets:
                 tracks = sets[key]
                 assert (h.source, h.target) in list(zip(tracks, tracks[1:]))
+
+
+# ==== Step evidence counts plays, not sets ====
+
+
+def test_a_move_repeated_inside_one_set_counts_twice_but_cites_the_set_once():
+    """If one DJ plays track 0 then track 1 twice in the same set, the step 0 to 1 is reported as seen 2 times but cites that single set once."""
+    doc = {
+        "schema": "jukebox-primitives/v1",
+        "meta": {"tracks": 2, "selectionEvents": 4, "transitionEvents": 3},
+        "artists": ["A"], "tracks": [["a#1", "a", [0], [], None, []], ["b#1", "b", [0], [], None, []]],
+        "selectorGroups": [[[0], "A", 0]], "dates": ["2018-01-01"],
+        "selections": [[0, 0, 0], [1, 0, 0], [0, 0, 0], [1, 0, 0]],
+        "transitions": [[0, 1, 0, 0], [1, 0, 0, 0], [0, 1, 0, 0]],
+    }
+    h = SixDegrees(parse_lostlands(doc)).hop(0, 1)
+    assert (h.evidence, h.count, h.sets) == (Status.KNOWN, 2, ((0, 0),))

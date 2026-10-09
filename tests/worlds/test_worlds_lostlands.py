@@ -18,9 +18,7 @@ from dsdk.worlds import (
     describe_provenance, load_lostlands, parse_lostlands, record_provenance, sha256_bytes,
 )
 
-# ------------------------------------------------------------------------------------------------ constants
-
-
+# ==== Pinned constants and the vendored file ====
 def test_the_pinned_digest_is_the_one_in_jukeboxs_pages_workflow():
     """jukebox .github/workflows/pages.yml: expected="7e0b652a...eb8a5"; the commit is the lab/composable-mining tip."""
     assert PINNED_SHA256 == "7e0b652aac543fbe89e80e8b47b5e7f0e67ac622ee20ae2426bd6d07492eb8a5"
@@ -36,10 +34,9 @@ def test_the_vendored_file_really_has_the_pinned_digest():
     assert sha256_bytes(b"abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 
 
-# ------------------------------------------------------------------------------------------------ integrity
-
-
+# ==== Integrity: a tampered or undecodable file is refused ====
 def test_load_default_path_verifies_and_records_the_digest(real_world):
+    """Loading the vendored corpus verifies it against the pinned digest and records that digest on the world."""
     assert real_world.sha256 == PINNED_SHA256
 
 
@@ -56,6 +53,7 @@ def test_a_flipped_byte_is_an_integrity_error_before_any_decoding(tmp_path):
 
 
 def test_a_different_pin_is_honoured_and_case_does_not_matter(tmp_path):
+    """A caller-supplied pin is honoured (upper case accepted) and the real-corpus pin does not accept a different file."""
     other = tmp_path / "toy.json.gz"
     other.write_bytes(gzip.compress(json.dumps(TOY_DOC).encode()))
     digest = sha256_bytes(other.read_bytes())
@@ -67,6 +65,7 @@ def test_a_different_pin_is_honoured_and_case_does_not_matter(tmp_path):
 
 
 def test_expected_sha256_none_skips_the_check_but_still_reports_the_digest(tmp_path):
+    """Passing expected_sha256=None skips the integrity check but the world still carries the file's actual digest."""
     other = tmp_path / "toy.json.gz"
     other.write_bytes(gzip.compress(json.dumps(TOY_DOC).encode()))
     world = load_lostlands(other, expected_sha256=None)
@@ -74,12 +73,14 @@ def test_expected_sha256_none_skips_the_check_but_still_reports_the_digest(tmp_p
 
 
 def test_path_may_be_a_str(tmp_path):
+    """load_lostlands accepts a plain string path as well as a Path."""
     copy = tmp_path / "copy.gz"
     shutil.copy(FIXTURE_PATH, copy)
     assert len(load_lostlands(str(copy)).tracks) == 1352
 
 
 def test_missing_file_is_file_not_found_not_a_world_error(tmp_path):
+    """A missing file raises FileNotFoundError, not a data-format error."""
     with pytest.raises(FileNotFoundError):
         load_lostlands(tmp_path / "nope.gz")
 
@@ -95,6 +96,7 @@ def test_missing_file_is_file_not_found_not_a_world_error(tmp_path):
     ],
 )
 def test_undecodable_payloads_are_world_errors_with_a_stage_prefix(tmp_path, payload, prefix):
+    """Files that are not gzip, are truncated, are not JSON, are not UTF-8 or are JSON of the wrong shape each raise WorldError with a message starting with the stage that failed."""
     f = tmp_path / "x.gz"
     f.write_bytes(payload)
     with pytest.raises(WorldError) as err:
@@ -102,9 +104,7 @@ def test_undecodable_payloads_are_world_errors_with_a_stage_prefix(tmp_path, pay
     assert str(err.value).startswith(prefix)
 
 
-# ------------------------------------------------------------------------------------------------ parse: toy
-
-
+# ==== Decoding the toy festival by hand ====
 def test_toy_world_decodes_exactly():
     """Every field of the toy document, derived from the doc in tests/worlds/toy_world.py."""
     w = toy_world()
@@ -124,6 +124,7 @@ def test_toy_world_decodes_exactly():
 
 
 def test_toy_labels():
+    """Track names render as 'Artists - Title', add the variation in parentheses, leave out featured artists, and dates render as their ISO string or None."""
     w = toy_world()
     assert w.track_artists(3) == "Ada & Bo" and w.track_artists(0) == "Ada"
     assert w.track_label(0) == "Ada - One"
@@ -134,6 +135,7 @@ def test_toy_labels():
 
 @pytest.mark.parametrize("bad", [-1, 6, 99])
 def test_track_lookups_do_not_wrap_around(bad):
+    """Looking up a negative or too-large track ID raises IndexError instead of wrapping around like a Python list."""
     w = toy_world()
     for call in (w.track_artists, w.track_label):
         with pytest.raises(IndexError):
@@ -142,6 +144,7 @@ def test_track_lookups_do_not_wrap_around(bad):
 
 @pytest.mark.parametrize("bad", [-2, -1, 2, 7])
 def test_date_label_rejects_out_of_range_indices(bad):
+    """date_label raises IndexError for any out-of-range date index."""
     with pytest.raises(IndexError):
         toy_world().date_label(bad)
 
@@ -154,11 +157,13 @@ def test_sets_are_grouped_in_first_appearance_order_and_keep_repeats():
 
 
 def test_check_transitions_toy_is_consistent():
+    """The toy world's transitions are exactly the consecutive pairs of its four sets, and check_transitions says KNOWN True with that count."""
     j = check_transitions(toy_world())
     assert (j.status, j.value, j.reason) == (Status.KNOWN, True, "transitions match the consecutive pairs of 4 sets")
 
 
 def test_check_transitions_notices_a_missing_extra_reordered_or_orphan_transition():
+    """check_transitions returns KNOWN False, naming the bad set, when a transition is missing, extra, in the wrong order, or belongs to a set that has no selections."""
     def verdict(mutate):
         doc = toy_doc()
         mutate(doc)
@@ -176,6 +181,7 @@ def test_check_transitions_notices_a_missing_extra_reordered_or_orphan_transitio
 
 
 def test_check_transitions_reports_the_first_bad_set_in_set_order():
+    """When several sets are inconsistent, check_transitions names the first one in set order."""
     doc = toy_doc()
     doc["transitions"] = [t for t in doc["transitions"] if t[:2] not in ([2, 3], [4, 3])]  # breaks B and D
     doc["meta"]["transitionEvents"] = len(doc["transitions"])
@@ -183,6 +189,7 @@ def test_check_transitions_reports_the_first_bad_set_in_set_order():
 
 
 def test_a_set_with_one_track_has_no_transitions_and_is_consistent():
+    """A set containing a single track needs no transitions and counts as consistent."""
     doc = toy_doc()
     doc["selections"].append([5, 1, 1])  # (G1, d1): only T5
     doc["meta"]["selectionEvents"] = 11
@@ -203,6 +210,7 @@ def test_undated_sets_are_kept_with_date_none():
 
 
 def test_parse_extra_keys_are_tolerated_and_the_input_is_not_aliased():
+    """Extra top-level keys are ignored, and editing the input document afterwards does not change an already-decoded world."""
     doc = toy_doc()
     doc["note"] = "extra"
     w = parse_lostlands(doc, sha256="abc")
@@ -212,9 +220,7 @@ def test_parse_extra_keys_are_tolerated_and_the_input_is_not_aliased():
     assert len(w.artists) == 3 and w.meta["corpus"] == "toy"
 
 
-# ------------------------------------------------------------------------------------------------ parse: adversarial
-
-
+# ==== Malformed documents are rejected with a named field ====
 def _mut(fn):
     doc = toy_doc()
     fn(doc)
@@ -269,6 +275,7 @@ BAD_DOCS = {
 
 @pytest.mark.parametrize("name", BAD_DOCS)
 def test_malformed_documents_raise_world_error_naming_the_field(name):
+    """Each of 43 kinds of malformed document (wrong schema, missing key, bad row, out-of-range ID, bool or float where an integer is required, wrong meta count) raises WorldError whose message names the field, never a KeyError or TypeError."""
     doc, field = BAD_DOCS[name]
     with pytest.raises(WorldError) as err:
         parse_lostlands(doc)
@@ -277,6 +284,7 @@ def test_malformed_documents_raise_world_error_naming_the_field(name):
 
 
 def test_group_truncated_accepts_booleans_and_zero_one():
+    """A selector group's truncated flag accepts 0, 1, False and True."""
     doc = toy_doc()
     doc["selectorGroups"][0][2] = False
     doc["selectorGroups"][2][2] = True
@@ -284,16 +292,16 @@ def test_group_truncated_accepts_booleans_and_zero_one():
 
 
 def test_an_empty_world_is_valid():
+    """A world with no tracks, groups or selections is valid and consistent."""
     doc = {"schema": SCHEMA, "meta": {"tracks": 0, "selectionEvents": 0, "transitionEvents": 0}, "artists": [], "tracks": [],
            "selectorGroups": [], "dates": [], "selections": [], "transitions": []}
     w = parse_lostlands(doc)
     assert (w.tracks, w.groups, w.sets()) == ((), (), {}) and check_transitions(w).value is True
 
 
-# ------------------------------------------------------------------------------------------------ the real corpus
-
-
+# ==== The real Lost Lands corpus decodes to the counted numbers ====
 def test_real_counts_match_the_independent_script(real_world, slices):
+    """The real corpus decodes to 817 artists, 1,352 tracks, 50 selector groups, 8 dates, 1,973 selections, 1,919 transitions and 54 sets, matching both the file's own meta and an independent counting script."""
     c = slices["counts"]
     w = real_world
     assert (len(w.artists), len(w.tracks), len(w.groups), len(w.dates), len(w.selections), len(w.transitions)) == (
@@ -306,6 +314,7 @@ def test_real_counts_match_the_independent_script(real_world, slices):
 
 
 def test_real_dates_and_truncated_credits(real_world):
+    """The real corpus has 8 dates from 2018-01-18 to 2018-11-18, exactly two truncated '+ More' credits, and no undated selection."""
     assert real_world.dates[0] == "2018-01-18" and real_world.dates[-1] == "2018-11-18" and len(real_world.dates) == 8
     assert [g.label for g in real_world.groups if g.truncated] == [
         "Excision & Sullivan King & Dion Timmer + More", "Virtual Riot & PhaseOne & Terravita + More"]
@@ -313,6 +322,7 @@ def test_real_dates_and_truncated_credits(real_world):
 
 
 def test_real_labels_of_known_tracks(real_world):
+    """Four real tracks decode to the expected readable names, such as 'Space Laces - Torque' for track 483."""
     assert real_world.track_label(483) == "Space Laces - Torque"
     assert real_world.track_label(237) == "PEEKABOO (USA) & G-REX - Babatunde"
     assert real_world.track_label(0) == "Excision - Codename X (REMIX)"
@@ -320,6 +330,7 @@ def test_real_labels_of_known_tracks(real_world):
 
 
 def test_real_transitions_are_consistent_with_selections(real_world):
+    """In the real corpus, every set's transitions are exactly the consecutive pairs of its selections, across all 54 sets."""
     j = check_transitions(real_world)
     assert (j.status, j.value) == (Status.KNOWN, True) and j.reason == "transitions match the consecutive pairs of 54 sets"
 
@@ -355,10 +366,9 @@ def test_real_hand_checked_tracks_selections(real_world, slices):
     assert slices["tracks"]["483"]["selections"] == 12 and len(slices["tracks"]["483"]["sets"]) == 11
 
 
-# ------------------------------------------------------------------------------------------------ provenance Parts
-
-
+# ==== Provenance is recorded as core Parts with lineage ====
 def test_provenance_parts_toy():
+    """Recording provenance writes five addresses in order (source digest, branch commit, counts, the describing function, and the provenance sentence) with the expected values."""
     store = record_provenance(toy_world(sha256="f" * 64))
     assert isinstance(store, PxC)
     assert [a for a, _ in store.entries()] == [
@@ -392,6 +402,7 @@ def test_provenance_sentence_is_a_composed_part_with_real_lineage():
 
 
 def test_provenance_into_an_existing_store_returns_that_store_and_is_write_once():
+    """record_provenance writes into a store you pass and returns it; a second call raises AddressOccupiedError and writes nothing more."""
     store = PxC()
     assert record_provenance(toy_world(), store) is store
     with pytest.raises(AddressOccupiedError):
@@ -400,6 +411,7 @@ def test_provenance_into_an_existing_store_returns_that_store_and_is_write_once(
 
 
 def test_provenance_does_not_clobber_unrelated_addresses():
+    """Recording provenance leaves unrelated addresses in the store untouched."""
     store = PxC()
     from dsdk.core import Part
     store.set("px.other", Part(1))
@@ -408,12 +420,14 @@ def test_provenance_does_not_clobber_unrelated_addresses():
 
 
 def test_provenance_missing_corpus_name_is_an_empty_string():
+    """If the corpus has no name in its meta, the recorded counts use an empty string for it."""
     doc = toy_doc()
     del doc["meta"]["corpus"]
     assert record_provenance(parse_lostlands(doc)).get("px.lostlands.counts").value["corpus"] == ""
 
 
 def test_provenance_of_the_real_world_matches_the_pins(real_world):
+    """For the real corpus the recorded digest is the pinned one and the provenance sentence is exactly the expected one-line summary."""
     store = record_provenance(real_world)
     assert store.get("px.lostlands.source_sha256").value == PINNED_SHA256
     assert store.get("px.lostlands.provenance").value == (
@@ -422,6 +436,7 @@ def test_provenance_of_the_real_world_matches_the_pins(real_world):
 
 
 def test_describe_provenance_is_a_pure_function_of_its_inputs():
+    """describe_provenance builds its sentence only from the digest, commit and counts it is given."""
     values = {"sha256": "0123456789abcdef", "commit": "1234567890", "counts": {
         "corpus": "c", "tracks": 1, "artists": 2, "selectorGroups": 3, "sets": 4, "dates": 5, "selections": 6, "transitions": 7}}
     assert describe_provenance(values) == "c: 1 tracks, 2 artists, 3 selector groups, 4 sets on 5 dates, 6 selections, 7 transitions; sha256 0123456789ab @ 1234567"

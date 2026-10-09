@@ -19,10 +19,9 @@ def edge_map(g):
     return {(e.source, e.target): (e.weight, e.evidence, e.label) for e in g.edges}
 
 
-# ---------------------------------------------------------------------------------------------- transition graph
-
-
+# ==== Track transition graph: directed, weighted by count, observed (KNOWN) ====
 def test_transition_graph_toy():
+    """The toy transition graph has all 6 tracks as nodes (including the never-played one) and exactly the 5 observed moves, with 0 to 1 weighted 2 because it happened twice, all KNOWN."""
     g = transition_graph(toy_world())
     assert isinstance(g, Graph) and g.directed and not g.closed_world
     assert g.nodes == (0, 1, 2, 3, 4, 5)  # T5 is never played but is still a node
@@ -33,6 +32,7 @@ def test_transition_graph_toy():
 
 
 def test_transition_graph_keeps_self_loops_and_counts_each_row():
+    """A track followed by itself becomes a self-loop edge with weight 1, and it is KNOWN."""
     doc = toy_doc()
     doc["selections"] += [[1, 0, 0], [1, 0, 0]]  # T1 played again in set A (graph tests do not need contiguity)
     doc["transitions"] += [[1, 1, 0, 0]]
@@ -42,15 +42,15 @@ def test_transition_graph_keeps_self_loops_and_counts_each_row():
 
 
 def test_transition_graph_direction_matters():
+    """The transition graph is directed: 0 to 1 exists without 1 to 0, while 3 to 4 and 4 to 3 both exist because both were observed."""
     g = transition_graph(toy_world())
     assert g.has_edge(0, 1) and not g.has_edge(1, 0)
     assert g.has_edge(3, 4) and g.has_edge(4, 3)  # observed both ways, in set D
 
 
-# ---------------------------------------------------------------------------------------------- co-selection graph
-
-
+# ==== Co-selection graph: shared sets, inferred (UNKNOWN) ====
 def test_coselection_graph_toy():
+    """The toy co-selection graph has exactly the five pairs that shared a set, weighted by the number of shared sets, all UNKNOWN (inferred)."""
     g = coselection_graph(toy_world())
     assert not g.directed and not g.closed_world and g.nodes == (0, 1, 2, 3, 4, 5)
     assert edge_map(g) == {(0, 1): (2, Status.UNKNOWN, None), (0, 2): (1, Status.UNKNOWN, None), (1, 2): (1, Status.UNKNOWN, None),
@@ -65,6 +65,7 @@ def test_coselection_never_claims_known_even_for_back_to_back_pairs():
 
 
 def test_a_track_repeated_in_one_set_is_not_co_selected_with_itself_and_counts_once():
+    """A track played twice in one set creates no self-edge and still counts as one shared set with its neighbour."""
     g = coselection_graph(toy_world())
     assert not g.has_edge(3, 3)
     assert g.get_edge(3, 4).weight == 1  # T3 twice in set D still one shared set
@@ -77,6 +78,7 @@ def test_coselection_is_per_set_not_per_date_or_per_dj():
 
 
 def test_undated_set_still_co_selects():
+    """Tracks in a set with no date are still co-selected with each other."""
     doc = toy_doc()
     doc["selections"] += [[4, 1, -1], [5, 1, -1]]
     doc["meta"]["selectionEvents"] = 12
@@ -85,9 +87,7 @@ def test_undated_set_still_co_selects():
     assert coselection_graph(parse_lostlands(doc)).get_edge(4, 5).weight == 1
 
 
-# ---------------------------------------------------------------------------------------------- DJ graph
-
-
+# ==== DJ graph: which DJs share tracks or members ====
 def test_dj_graph_by_tracks_toy():
     """G0 played {0,1,2}, G1 {2,3}, G2 {3,4}: G0-G1 share {2}, G1-G2 share {3}, G0-G2 share nothing."""
     g = dj_graph(toy_world())
@@ -103,6 +103,7 @@ def test_dj_graph_by_members_toy():
 
 
 def test_dj_graph_weight_counts_distinct_shared_tracks_not_plays():
+    """The DJ graph weight is the number of distinct shared tracks, so playing the same shared track twice does not add weight."""
     doc = toy_doc()
     doc["selections"] += [[3, 0, 1], [3, 0, 1]]  # G0 plays T3 twice more in set C: G0-G1 now share {2, 3}
     doc["meta"]["selectionEvents"] = 12
@@ -113,13 +114,12 @@ def test_dj_graph_weight_counts_distinct_shared_tracks_not_plays():
 
 @pytest.mark.parametrize("bad", ["track", "Tracks", "", None, 3])
 def test_dj_graph_rejects_unknown_modes(bad):
+    """dj_graph raises ValueError for any mode other than 'tracks' or 'members'."""
     with pytest.raises(ValueError):
         dj_graph(toy_world(), by=bad)
 
 
-# ---------------------------------------------------------------------------------------------- six degrees graph
-
-
+# ==== Combined search graph: observed moves plus inferred co-selection ====
 def test_six_degrees_graph_toy_edges_evidence_and_labels():
     """KNOWN: 0>1 1>2 2>3 3>4 4>3 (each also co-selected -> label 'co-selection,transition').
     UNKNOWN: reverses 1>0 2>1 3>2, and both directions of {0,2}. 3>4 and 4>3 are both observed, so both KNOWN."""
@@ -136,6 +136,7 @@ def test_six_degrees_graph_toy_edges_evidence_and_labels():
 
 
 def test_six_degrees_graph_known_self_loop_is_labelled_transition_only():
+    """An observed self-loop in the search graph is KNOWN and labelled just 'transition', since co-selection never links a track to itself."""
     doc = toy_doc()
     doc["selections"] += [[1, 0, 1], [1, 0, 1]]
     doc["transitions"] += [[1, 1, 0, 1]]
@@ -146,13 +147,13 @@ def test_six_degrees_graph_known_self_loop_is_labelled_transition_only():
 
 
 def test_labels_and_constants():
+    """The two edge labels are exactly 'transition' and 'co-selection'."""
     assert TRANSITION_LABEL == "transition" and COSELECTION_LABEL == "co-selection"
 
 
-# ---------------------------------------------------------------------------------------------- real corpus
-
-
+# ==== Real-corpus graphs match the independent counting script ====
 def test_real_graph_totals_match_the_independent_script(real_world, slices):
+    """On the real corpus the transition and co-selection graphs have the same edge counts, self-loop count, total weights and component count as the independent counting script."""
     t = slices["graph_totals"]
     tg, cg = transition_graph(real_world), coselection_graph(real_world)
     assert len(tg.edges) == t["transition_edges"] == 1894
@@ -165,6 +166,7 @@ def test_real_graph_totals_match_the_independent_script(real_world, slices):
 
 
 def test_real_dj_graph_matches_the_independent_script(real_world, slices):
+    """The real DJ graph (both by shared tracks and by shared members) has exactly the edges and weights the independent script computed."""
     by_tracks, by_members = dj_graph(real_world), dj_graph(real_world, by="members")
     assert {f"{e.source},{e.target}": e.weight for e in by_tracks.edges} == slices["dj_tracks"]
     assert {f"{e.source},{e.target}": e.weight for e in by_members.edges} == slices["dj_members"]
@@ -189,6 +191,7 @@ def test_real_track_neighbourhoods_match_hand_checked_slices(real_world, slices)
 
 
 def test_real_co_pair_weights(real_world, slices):
+    """The twelve most co-selected real track pairs have exactly the shared-set counts the independent script computed."""
     cg = coselection_graph(real_world)
     for key, n in slices["co_pairs"].items():
         a, b = (int(x) for x in key.split(","))
@@ -196,6 +199,7 @@ def test_real_co_pair_weights(real_world, slices):
 
 
 def test_real_six_degrees_graph_size(real_world, slices):
+    """The real search graph has 96,599 edges, of which exactly 1,894 are KNOWN, with the component count the independent script found."""
     g = six_degrees_graph(real_world)
     assert len(g.edges) == slices["graph_totals"]["six_degrees_edges"] == 96599
     assert sum(1 for e in g.edges if e.evidence is Status.KNOWN) == 1894

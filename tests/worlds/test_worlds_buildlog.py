@@ -22,7 +22,9 @@ def line(**over):
     return json.dumps({k: v for k, v in base.items() if v is not ...})
 
 
+# ==== Loading the ledger as typed records ====
 def test_sample_loads_as_typed_records():
+    """The frozen 12-line ledger sample loads as 12 typed records whose fields (task, model, attempt, outcome, wall seconds, tests, round, note) carry the values on those lines, with seconds as floats and missing test counts as None."""
     entries = load_ledger(SAMPLE)
     assert len(entries) == 12 and all(isinstance(e, LedgerEntry) for e in entries)
     e = entries[1]
@@ -36,16 +38,20 @@ def test_sample_loads_as_typed_records():
 
 
 def test_models_are_sorted_and_distinct():
+    """models() lists each model name once, alphabetically, and gives an empty tuple for no entries."""
     assert models(load_ledger(SAMPLE)) == ("haiku", "sonnet")
     assert models(()) == ()
 
 
+# ==== First-try rate as a Judgment (known, unknown, not observed, invalid) ====
 def test_first_try_rate_known():
+    """On the sample, Haiku passed 9 of its 10 first attempts, so first_try_rate says KNOWN 0.9 with the reason '9/10 attempt-1 runs passed'."""
     j = first_try_rate(load_ledger(SAMPLE), "haiku")
     assert (j.status, j.value, j.reason) == (Status.KNOWN, 0.9, "9/10 attempt-1 runs passed")
 
 
 def test_first_try_rate_ignores_retries_and_counts_only_pass():
+    """Second attempts and other models are not counted, and 'partial', 'fail' and 'error' outcomes do not count as passes: 1 pass in 4 first attempts is 0.25."""
     es = parse_ledger([line(outcome="fail"), line(attempt=2, outcome="pass"), line(outcome="partial"), line(outcome="error"),
                        line(model="sonnet"), line(outcome="pass")])
     j = first_try_rate(es, "haiku")
@@ -53,11 +59,13 @@ def test_first_try_rate_ignores_retries_and_counts_only_pass():
 
 
 def test_zero_percent_is_a_known_value_not_a_missing_one():
+    """A model that failed every first attempt gets KNOWN 0.0, not 'unknown': zero is a measured value."""
     j = first_try_rate(parse_ledger([line(outcome="fail")]), "haiku")
     assert j.status is Status.KNOWN and j.value == 0.0
 
 
 def test_not_observed_unknown_and_invalid_stay_distinct():
+    """No data for a model is NOT_OBSERVED, too little data (fewer than min_n) is UNKNOWN, a nonsense question (empty model, min_n of 0, a bool) is INVALID, and enough data is KNOWN: four different answers, never merged."""
     es = load_ledger(SAMPLE)
     no_data = first_try_rate(es, "opus")
     assert (no_data.status, no_data.value, no_data.reason) == (Status.NOT_OBSERVED, None, "no attempt-1 entries for 'opus'")
@@ -72,21 +80,26 @@ def test_not_observed_unknown_and_invalid_stay_distinct():
 
 
 def test_a_model_with_only_retries_is_not_observed_for_first_tries():
+    """A model that only appears as a second attempt has no first-try data, so its first-try rate is NOT_OBSERVED."""
     j = first_try_rate(parse_ledger([line(attempt=2)]), "haiku")
     assert j.status is Status.NOT_OBSERVED
 
 
 def test_first_try_rate_accepts_a_one_shot_iterator():
+    """first_try_rate works when given a one-shot iterator rather than a tuple, consuming it once."""
     assert first_try_rate(iter(parse_ledger([line()])), "haiku").value == 1.0
 
 
+# ==== Reading ledger lines and rejecting malformed ones ====
 def test_blank_lines_are_skipped_but_counted():
+    """Blank lines produce no entry but still count toward line numbers, so a record on physical line 4 reports line 4."""
     es = parse_ledger(["", line(), "   ", line(task="T2")])
     assert [e.line for e in es] == [2, 4]
     assert parse_ledger([]) == () and parse_ledger(["", " "]) == ()
 
 
 def test_optional_fields_default():
+    """Omitted tests_passed, tests_total, round and note default to None, None, None and an empty string, a zero test count is kept as 0, and wall seconds may be a float."""
     e = parse_ledger([line()])[0]
     assert (e.tests_passed, e.tests_total, e.round, e.note) == (None, None, None, "")
     assert parse_ledger([line(tests_passed=0, tests_total=0)])[0].tests_passed == 0
@@ -119,6 +132,7 @@ BAD = {
 
 @pytest.mark.parametrize("name", BAD)
 def test_malformed_lines_raise_ledger_error_with_the_line_number(name):
+    """Each kind of malformed ledger line (bad JSON, wrong types, unknown key, impossible values) raises LedgerError starting with 'line 1:' and naming the offending field."""
     text, expect = BAD[name]
     with pytest.raises(LedgerError) as err:
         parse_ledger([text])
@@ -127,12 +141,14 @@ def test_malformed_lines_raise_ledger_error_with_the_line_number(name):
 
 
 def test_the_error_names_the_physical_line():
+    """When the third physical line is bad, the error message starts with 'line 3:' even though blank lines come before it."""
     with pytest.raises(LedgerError) as err:
         parse_ledger([line(), "", line(outcome="nope")])
     assert str(err.value).startswith("line 3:")
 
 
 def test_non_finite_wall_time_is_rejected():
+    """NaN and Infinity wall times (which Python's JSON parser accepts) are rejected as ledger errors."""
     with pytest.raises(LedgerError):
         parse_ledger(['{"ts":1,"task":"a","model":"m","attempt":1,"outcome":"pass","wall_s":NaN}'])
     with pytest.raises(LedgerError):
@@ -140,11 +156,13 @@ def test_non_finite_wall_time_is_rejected():
 
 
 def test_outcomes_and_default_path():
+    """The accepted outcomes are exactly pass, partial, fail and error, and the default ledger path is ops/ledger.jsonl."""
     assert OUTCOMES == ("pass", "partial", "fail", "error")
     assert LEDGER_PATH.name == "ledger.jsonl" and LEDGER_PATH.parent.name == "ops"
 
 
 def test_load_ledger_edge_cases(tmp_path):
+    """An empty ledger file loads as no entries, a missing file raises FileNotFoundError, and non-ASCII notes survive UTF-8 reading."""
     empty = tmp_path / "e.jsonl"
     empty.write_text("")
     assert load_ledger(empty) == () and load_ledger(str(empty)) == ()
