@@ -124,7 +124,10 @@ def ancestors(net: BayesNet, node: str) -> frozenset[str]:
     """All proper ancestors of ``node`` (parents, their parents, ...; ``node`` itself is NOT included, and in a DAG it cannot
     be its own ancestor). Computed with ``dsdk.graph.bfs`` on ``structure.reverse()``. ``dsdk.graph.MissingNodeError`` for a
     node not in the net; ``TypeError`` for a non-BayesNet."""
-    raise NotImplementedError
+    if not isinstance(net, BayesNet):
+        raise TypeError(f"ancestors takes a BayesNet, not {type(net).__name__}")
+    reached = bfs(net.structure.reverse(), node).distance
+    return frozenset(k for k in reached if k != node)
 
 
 def ancestral_net(net: BayesNet, nodes: set[str] | frozenset[str]) -> BayesNet:
@@ -134,4 +137,22 @@ def ancestral_net(net: BayesNet, nodes: set[str] | frozenset[str]) -> BayesNet:
     marginal under the full net, so barren descendants never need to be enumerated. ``MissingNodeError`` for a node not in
     the net; ``TypeError`` for a non-BayesNet or a ``nodes`` that is not a set/frozenset of str.
     """
-    raise NotImplementedError
+    if not isinstance(net, BayesNet):
+        raise TypeError(f"ancestral_net takes a BayesNet, not {type(net).__name__}")
+    if not isinstance(nodes, (set, frozenset)):
+        raise TypeError(f"nodes must be a set or frozenset of str, not {type(nodes).__name__}")
+    for n in nodes:
+        if not isinstance(n, str):
+            raise TypeError(f"nodes must hold only str, not {type(n).__name__}: {n!r}")
+    keep = set(nodes)
+    for n in nodes:
+        keep |= ancestors(net, n)
+    order = [n for n in net.structure.nodes if n in keep]
+    edges = [
+        Edge(e.source, e.target, weight=e.weight, evidence=e.evidence, label=e.label)
+        for e in net.structure.edges
+        if e.source in keep and e.target in keep
+    ]
+    sub = Graph.from_edges(edges, order, directed=True, closed_world=net.structure.closed_world)
+    cpts = {n: dict(net.cpts[n]) for n in order}
+    return BayesNet(sub, cpts)
