@@ -2,7 +2,7 @@
 
 The code in `dsdk.lang.calc` is the executable counterpart of the proofs below. The Hypothesis properties in
 `tests/lang/test_calc_properties.py` only SAMPLE these statements; the proofs establish them for ALL terms.
-Rule names (B1, B2, B3, A1-A3, O1-O3, N1, I1, L1) are the ones in the `calc.py` module docstring. `v` ranges over values
+Rule names B1, B2, B3, A1-A3, O1-O3, N1, I1 and L1 are the ones in the `calc.py` module docstring; I-true, I-false, N and L are this note's shorthand for the I1 (true/false branch), N1 and L1 cases. `v` ranges over values
 (`IntLit` / `BoolLit`). A closed term has no free variables.
 
 ## Setting
