@@ -61,18 +61,114 @@ def parse_ledger(lines: Iterable[str]) -> tuple[LedgerEntry, ...]:
     ``"missing key 'x'"``, ``"unknown key 'x'"``, ``"outcome must be one of ..."``, ``"... must be ..."``).
     ``LedgerEntry.line`` is the 1-based physical line number.
     """
-    raise NotImplementedError
+    entries = []
+    for number, text in enumerate(lines, start=1):
+        if text.strip() == "":
+            continue
+        entries.append(_parse_line(number, text))
+    return tuple(entries)
+
+
+def _is_int(x: object) -> bool:
+    return isinstance(x, int) and not isinstance(x, bool)
+
+
+def _error(number: int, message: str) -> LedgerError:
+    return LedgerError(f"line {number}: {message}")
+
+
+def _finite_seconds(x: object) -> float | None:
+    """The value as a float if it is a real, finite number >= 0; otherwise None."""
+    if isinstance(x, bool) or not isinstance(x, (int, float)):
+        return None
+    try:
+        value = float(x)
+    except OverflowError:
+        return None
+    if not math.isfinite(value) or value < 0:
+        return None
+    return value
+
+
+def _optional_count(obj: dict, key: str, number: int) -> int | None:
+    value = obj.get(key)
+    if value is None:
+        return None
+    if not _is_int(value) or value < 0:
+        raise _error(number, f"{key} must be None or an int >= 0")
+    return value
+
+
+def _parse_line(number: int, text: str) -> LedgerEntry:
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError:
+        raise _error(number, "invalid JSON") from None
+    if not isinstance(obj, dict):
+        raise _error(number, "not an object")
+    for key in _REQUIRED:
+        if key not in obj:
+            raise _error(number, f"missing key {key!r}")
+    for key in obj:
+        if key not in _REQUIRED and key not in _OPTIONAL:
+            raise _error(number, f"unknown key {key!r}")
+
+    ts = obj["ts"]
+    if not _is_int(ts):
+        raise _error(number, "ts must be an int")
+    task = obj["task"]
+    if not isinstance(task, str) or task == "":
+        raise _error(number, "task must be a non-empty string")
+    model = obj["model"]
+    if not isinstance(model, str) or model == "":
+        raise _error(number, "model must be a non-empty string")
+    attempt = obj["attempt"]
+    if not _is_int(attempt) or attempt < 1:
+        raise _error(number, "attempt must be an int >= 1")
+    outcome = obj["outcome"]
+    if outcome not in OUTCOMES:
+        raise _error(number, f"outcome must be one of {', '.join(OUTCOMES)}")
+    wall_s = _finite_seconds(obj["wall_s"])
+    if wall_s is None:
+        raise _error(number, "wall_s must be a finite number >= 0")
+
+    tests_passed = _optional_count(obj, "tests_passed", number)
+    tests_total = _optional_count(obj, "tests_total", number)
+    if tests_passed is not None and tests_total is not None and tests_passed > tests_total:
+        raise _error(number, "tests_passed must be <= tests_total")
+
+    round_no = obj.get("round")
+    if round_no is not None and not _is_int(round_no):
+        raise _error(number, "round must be None or an int")
+    note = obj.get("note", "")
+    if not isinstance(note, str):
+        raise _error(number, "note must be a string")
+
+    return LedgerEntry(
+        line=number,
+        ts=ts,
+        task=task,
+        model=model,
+        attempt=attempt,
+        outcome=outcome,
+        wall_s=wall_s,
+        tests_passed=tests_passed,
+        tests_total=tests_total,
+        round=round_no,
+        note=note,
+    )
 
 
 def load_ledger(path: str | Path | None = None) -> tuple[LedgerEntry, ...]:
     """``parse_ledger`` of the file's lines (UTF-8). ``path=None`` means :data:`LEDGER_PATH`. A missing file raises
     ``FileNotFoundError``; an empty file gives ``()``."""
-    raise NotImplementedError
+    target = LEDGER_PATH if path is None else Path(path)
+    return parse_ledger(target.read_text(encoding="utf-8").splitlines())
 
 
 def models(entries: Iterable[LedgerEntry]) -> tuple[str, ...]:
     """The distinct model names, sorted alphabetically."""
-    raise NotImplementedError
+    return tuple(sorted({e.model for e in entries}))
 
 
 def first_try_rate(entries: Iterable[LedgerEntry], model: str, *, min_n: int = 1) -> Judgment:
@@ -90,4 +186,21 @@ def first_try_rate(entries: Iterable[LedgerEntry], model: str, *, min_n: int = 1
        legitimate KNOWN value).
     ``entries`` may be any iterable (consumed once).
     """
-    raise NotImplementedError
+    if not isinstance(model, str) or model == "":
+        return Judgment(Status.INVALID, None, "model must be a non-empty string")
+    if not _is_int(min_n) or min_n < 1:
+        return Judgment(Status.INVALID, None, "min_n must be an integer >= 1")
+
+    seen = 0
+    passes = 0
+    for entry in entries:
+        if entry.model == model and entry.attempt == 1:
+            seen += 1
+            if entry.outcome == "pass":
+                passes += 1
+
+    if seen == 0:
+        return Judgment(Status.NOT_OBSERVED, None, f"no attempt-1 entries for {model!r}")
+    if seen < min_n:
+        return Judgment(Status.UNKNOWN, None, f"only {seen} attempt-1 entries for {model!r}, need {min_n}")
+    return Judgment(Status.KNOWN, passes / seen, f"{passes}/{seen} attempt-1 runs passed")

@@ -35,3 +35,5 @@
 {"ts": 1791507026, "task": "T14", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 28, "tests_passed": 91, "tests_total": 91, "round": 9, "note": "F: big-step evaluate; properties 13/13"}
 {"ts": 1791507081, "task": "T11", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 120, "tests_passed": 146, "tests_total": 146, "round": 9, "note": "F: calc parser"}
 {"ts": 1791507178, "task": "T16", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 120, "tests_passed": 1338, "tests_total": 1338, "round": 10, "note": "F: bridge + A2 integration gate"}
+{"ts": 1791508074, "task": "T54", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 63, "tests_passed": 35, "tests_total": 35, "round": 11, "note": "W: build-log loader"}
+{"ts": 1791508074, "task": "T50", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 120, "tests_passed": 80, "tests_total": 80, "round": 11, "note": "W: Lost Lands loader"}
