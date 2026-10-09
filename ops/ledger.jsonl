@@ -13,3 +13,4 @@
 {"ts": 1791494526, "task": "T06", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 28, "tests_passed": 300, "tests_total": 300, "round": 4, "note": ""}
 {"ts": 1791504148, "task": "T40", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 26, "tests_passed": 105, "tests_total": 105, "round": 5, "note": "attempted remote send_message; denied by permission mode"}
 {"ts": 1791505478, "task": "audit-A1-proofs", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 600, "tests_passed": null, "tests_total": null, "round": null, "note": "2x SOUND WITH GAPS; 1 factual error in broken-proof remark"}
+{"ts": 1791505608, "task": "proofs-A1-rev", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 400, "tests_passed": null, "tests_total": null, "round": null, "note": "closed 10 audit findings; pending re-audit"}
