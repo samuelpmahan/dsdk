@@ -15,3 +15,5 @@
 {"ts": 1791505478, "task": "audit-A1-proofs", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 600, "tests_passed": null, "tests_total": null, "round": null, "note": "2x SOUND WITH GAPS; 1 factual error in broken-proof remark"}
 {"ts": 1791505608, "task": "proofs-A1-rev", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 400, "tests_passed": null, "tests_total": null, "round": null, "note": "closed 10 audit findings; pending re-audit"}
 {"ts": 1791505666, "task": "contracts-A5", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 1528, "tests_passed": null, "tests_total": null, "round": null, "note": "273 tests, 23/23 mutants caught, 7 cards T20-T26"}
+{"ts": 1791505765, "task": "T20", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 74, "tests_passed": 69, "tests_total": 69, "round": 6, "note": ""}
+{"ts": 1791505765, "task": "reaudit-A1", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 134, "tests_passed": null, "tests_total": null, "round": null, "note": "P1,P3 SOUND; P2 gaps N1-N6; N2 is a real code bug"}

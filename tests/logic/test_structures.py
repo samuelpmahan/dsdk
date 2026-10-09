@@ -190,3 +190,14 @@ def test_triangular_is_computed_by_iteration_not_the_closed_form():
     )
     assert not banned, "triangular must not use * / // (closed form)"
     assert iterates, "triangular must iterate (for/while/comprehension/sum)"
+
+
+def test_bare_tree_base_class_is_not_a_valid_tree():
+    """Tree is an abstract sum type: only Leaf and Node are trees. A bare Tree() must be
+    rejected wherever a child is accepted, or mirror() would later crash on an
+    'unreachable' branch (found by the A1 proof re-audit, AUDIT-2 N2)."""
+    from dsdk.logic import Leaf, Node, Tree
+    with pytest.raises(TypeError):
+        Tree()
+    with pytest.raises(TypeError):
+        Node(Tree.__new__(Tree), Leaf(1))

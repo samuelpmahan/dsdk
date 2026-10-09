@@ -55,6 +55,7 @@ f. Finally orient (undirected) and sort per invariant 4.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Hashable, Iterable, Mapping
 
@@ -105,7 +106,69 @@ class Graph:
 
         ``edges`` may be a one-shot iterable (consume it once). ``from_edges([])`` is the empty graph.
         """
-        raise NotImplementedError
+        edges = list(edges)
+        nodes = None if nodes is None else list(nodes)
+
+        normal: list[Edge] = []
+        for item in edges:
+            if isinstance(item, Edge):
+                edge = item
+            elif isinstance(item, tuple):
+                if len(item) not in (2, 3):
+                    raise TypeError(f"edge tuple must have 2 or 3 items, got {item!r}")
+                edge = Edge(*item)
+            else:
+                raise TypeError(f"edge must be an Edge or a tuple, got {item!r}")
+            w = edge.weight
+            if w is not None:
+                if isinstance(w, bool) or not isinstance(w, (int, float)):
+                    raise TypeError(f"weight must be None or a number, got {w!r}")
+                if not math.isfinite(w):
+                    raise ValueError(f"weight must be finite, got {w!r}")
+            if not isinstance(edge.evidence, Status):
+                raise TypeError(f"evidence must be a Status, got {edge.evidence!r}")
+            if edge.evidence not in EDGE_STATUSES:
+                raise ValueError(f"evidence {edge.evidence!r} is not allowed on an edge")
+            if edge.label is not None and not isinstance(edge.label, str):
+                raise TypeError(f"label must be None or str, got {edge.label!r}")
+            normal.append(edge)
+
+        index: dict[Hashable, int] = {}
+        if nodes is None:
+            for edge in normal:
+                for node in (edge.source, edge.target):
+                    if node not in index:
+                        index[node] = len(index)
+        else:
+            for node in nodes:
+                if node not in index:
+                    index[node] = len(index)
+
+        for edge in normal:
+            for node in (edge.source, edge.target):
+                if node not in index:
+                    raise MissingNodeError(f"edge endpoint {node!r} is not in the node set")
+
+        groups: dict[tuple[Hashable, Hashable], list[Edge]] = {}
+        for edge in normal:
+            u, v = edge.source, edge.target
+            if not directed and index[u] > index[v]:
+                u, v = v, u
+            groups.setdefault((u, v), []).append(edge)
+
+        merged: list[Edge] = []
+        for (u, v), group in groups.items():
+            weight = group[0].weight
+            for other in group[1:]:
+                if other.weight != weight:
+                    raise GraphError(f"conflicting weights for edge {u!r} -> {v!r}: {weight!r} vs {other.weight!r}")
+            evidence = min((g.evidence for g in group), key=EVIDENCE_RANK.__getitem__)
+            labels = sorted({g.label for g in group if g.label is not None})
+            label = ",".join(labels) if labels else None
+            merged.append(Edge(u, v, weight, evidence, label))
+
+        merged.sort(key=lambda e: (index[e.source], index[e.target]))
+        return cls(tuple(index), tuple(merged), directed, closed_world)
 
     @classmethod
     def from_records(
@@ -131,15 +194,39 @@ class Graph:
         Then the same rules as :meth:`from_edges` apply (duplicate rows merge: see the module docstring; missing
         endpoints raise ``MissingNodeError`` unless ``nodes`` declares them).
         """
-        raise NotImplementedError
+        edges: list[Edge] = []
+        for record in records:
+            try:
+                u = record[source]
+                v = record[target]
+                w = record[weight] if weight is not None else None
+                ev = record[evidence] if evidence is not None else Status.KNOWN
+                lab = record[label] if label is not None else None
+            except KeyError as exc:
+                raise GraphError(f"record {record!r} has no key {exc.args[0]!r}") from exc
+            if isinstance(ev, str):
+                ev = Status(ev)
+            edges.append(Edge(u, v, w, ev, lab))
+        return cls.from_edges(edges, nodes, directed=directed, closed_world=closed_world)
 
     def has_node(self, node: Hashable) -> bool:
         """True iff ``node`` is one of ``nodes``."""
-        raise NotImplementedError
+        return node in self._positions()
+
+    def _positions(self) -> dict[Hashable, int]:
+        """Node -> position in ``nodes`` (internal lookup helper)."""
+        return {node: i for i, node in enumerate(self.nodes)}
+
+    def _position_or_raise(self, node: Hashable) -> int:
+        """Position of ``node``; :class:`MissingNodeError` if absent (internal helper)."""
+        pos = self._positions()
+        if node not in pos:
+            raise MissingNodeError(f"node {node!r} is not in the graph")
+        return pos[node]
 
     def index_of(self, node: Hashable) -> int:
         """Position of ``node`` in ``nodes``. :class:`MissingNodeError` if absent."""
-        raise NotImplementedError
+        return self._position_or_raise(node)
 
     def get_edge(self, u: Hashable, v: Hashable) -> Edge | None:
         """The stored edge between ``u`` and ``v``, or ``None``.
@@ -147,30 +234,51 @@ class Graph:
         Directed: the edge ``u -> v`` only. Undirected: the edge on the unordered pair, whichever way it is
         stored. Never raises: if ``u`` or ``v`` is not a node the answer is ``None``.
         """
-        raise NotImplementedError
+        if not (self.has_node(u) and self.has_node(v)):
+            return None
+        for edge in self.edges:
+            if edge.source == u and edge.target == v:
+                return edge
+            if not self.directed and edge.source == v and edge.target == u:
+                return edge
+        return None
 
     def has_edge(self, u: Hashable, v: Hashable) -> bool:
         """``get_edge(u, v) is not None``."""
-        raise NotImplementedError
+        return self.get_edge(u, v) is not None
 
     def neighbors(self, node: Hashable) -> tuple[Hashable, ...]:
         """Successors of ``node`` (directed) or all neighbours (undirected), each ONCE, in node order.
 
         A self-loop makes ``node`` its own neighbour. :class:`MissingNodeError` if ``node`` is absent.
         """
-        raise NotImplementedError
+        me = self._position_or_raise(node)
+        pos = self._positions()
+        found: set[int] = set()
+        for edge in self.edges:
+            s, t = pos[edge.source], pos[edge.target]
+            if s == me:
+                found.add(t)
+            if not self.directed and t == me:
+                found.add(s)
+        return tuple(self.nodes[i] for i in sorted(found))
 
     def predecessors(self, node: Hashable) -> tuple[Hashable, ...]:
         """Directed: nodes ``p`` with an edge ``p -> node``, in node order. Undirected: same as ``neighbors``.
 
         :class:`MissingNodeError` if ``node`` is absent.
         """
-        raise NotImplementedError
+        if not self.directed:
+            return self.neighbors(node)
+        me = self._position_or_raise(node)
+        pos = self._positions()
+        found = {pos[e.source] for e in self.edges if pos[e.target] == me}
+        return tuple(self.nodes[i] for i in sorted(found))
 
     def adjacency(self) -> dict[Hashable, tuple[Hashable, ...]]:
         """Adjacency-list view: ``{node: neighbors(node)}`` for EVERY node (isolated nodes map to ``()``),
         with keys in node order."""
-        raise NotImplementedError
+        return {node: self.neighbors(node) for node in self.nodes}
 
     def adjacency_matrix(self) -> tuple[tuple[int, ...], ...]:
         """n x n 0/1 matrix in node order: entry ``[i][j]`` is 1 iff ``nodes[j]`` is in ``neighbors(nodes[i])``.
@@ -178,18 +286,38 @@ class Graph:
         Undirected graphs give a symmetric matrix. A self-loop gives a 1 on the diagonal (undirected: 1, not 2).
         The empty graph gives ``()``.
         """
-        raise NotImplementedError
+        pos = self._positions()
+        n = len(self.nodes)
+        mat = [[0] * n for _ in range(n)]
+        for edge in self.edges:
+            i, j = pos[edge.source], pos[edge.target]
+            mat[i][j] = 1
+            if not self.directed:
+                mat[j][i] = 1
+        return tuple(tuple(row) for row in mat)
 
     def weight_matrix(self) -> tuple[tuple[float | None, ...], ...]:
         """n x n matrix in node order: entry ``[i][j]`` is the weight of the edge ``nodes[i] -> nodes[j]``
         (``1`` if that edge exists but is unweighted) and ``None`` where there is no edge. ``None`` (not 0) marks
         absence because 0 is a legal weight. Undirected: symmetric."""
-        raise NotImplementedError
+        pos = self._positions()
+        n = len(self.nodes)
+        mat: list[list[float | None]] = [[None] * n for _ in range(n)]
+        for edge in self.edges:
+            i, j = pos[edge.source], pos[edge.target]
+            w = 1 if edge.weight is None else edge.weight
+            mat[i][j] = w
+            if not self.directed:
+                mat[j][i] = w
+        return tuple(tuple(row) for row in mat)
 
     def reverse(self) -> "Graph":
         """Directed: every edge flipped (``a -> b`` becomes ``b -> a``; weight, evidence and label kept), same
         nodes, same flags, normalised per the invariants. Undirected: an equal graph."""
-        raise NotImplementedError
+        if not self.directed:
+            return self
+        flipped = [Edge(e.target, e.source, e.weight, e.evidence, e.label) for e in self.edges]
+        return type(self).from_edges(flipped, self.nodes, directed=True, closed_world=self.closed_world)
 
     def relabel(self, mapping: Mapping[Hashable, Hashable]) -> "Graph":
         """Rename nodes. ``mapping`` must have a key for EVERY node (else :class:`MissingNodeError`) and must
@@ -198,4 +326,13 @@ class Graph:
         therefore every deterministic tie-break. Edges keep weight, evidence and label; the result satisfies the
         invariants (for undirected graphs the stored orientation is unchanged, as positions are unchanged).
         """
-        raise NotImplementedError
+        for node in self.nodes:
+            if node not in mapping:
+                raise MissingNodeError(f"relabel mapping has no key for node {node!r}")
+        new_nodes = tuple(mapping[node] for node in self.nodes)
+        if len(set(new_nodes)) != len(new_nodes):
+            raise GraphError("relabel mapping must be injective on the nodes")
+        new_edges = tuple(
+            Edge(mapping[e.source], mapping[e.target], e.weight, e.evidence, e.label) for e in self.edges
+        )
+        return type(self)(new_nodes, new_edges, self.directed, self.closed_world)
