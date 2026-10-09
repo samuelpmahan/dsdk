@@ -104,6 +104,11 @@ check("P1 condition composes / commutes / is idempotent as belief values; total 
 check("P2 INVALID exactly when M([e]) = 0, with a reason, never KNOWN", not any(x[0] == "P2" for x in bad), f"{n_invalid} zero-mass cases, {n_vacuous} of them vacuously entailed by logic")
 check("P2 the vacuous-entailment contrast was actually exercised", n_vacuous > 0, f"{n_vacuous}")
 
+# P2 scope: the proof says "INVALID iff M([e]) = 0"; the code answers UNKNOWN first when a variable is unmodelled
+unmod = probability(prior_belief({"A": F(1, 2)}), Var("A"), And(Var("Z"), Not(Var("Z"))))
+check("P2 SCOPE: unsatisfiable evidence that mentions an unmodelled variable is UNKNOWN, not INVALID (the 'iff' holds only for modelled variables)",
+      unmod.status is Status.UNKNOWN, f"got {unmod.status.name}: {unmod.reason}")
+
 # ---------------------------------------------------------------- P3
 Av, Bv = Var("A"), Var("B")
 for p in (F(1, 5), F(1, 2), F(1, 10), F(3, 7), F(1), F(2, 3)):
@@ -186,7 +191,6 @@ for _ in range(3000):
         if ws[i] == 0 and i == 0 and p_le[0] != 0:
             zero_prob_bad += 1
 check("P4 under the exact law (u on the 2^-53 grid) a zero-weight outcome has probability exactly 0", zero_prob_bad == 0)
-check("P4 the algorithm draws exactly what the stated rule says (bisect_right over float cumulatives)", True, "see script: compared against random.Random(seed).random() below")
 for seed in range(30):
     ws = [F(1), F(0), F(3), F(2)]
     cum = [float(F(1, 6)), float(F(1, 6)), float(F(4, 6)), 1.0]
@@ -194,6 +198,9 @@ for seed in range(30):
     want = tuple(next(i for i, c in enumerate(cum) if c > u) for u in (r.random() for _ in range(50)))
     if inverse_cdf_draws(ws, 50, seed) != want:
         bad.append(("P4 rule", seed))
+tiny = inverse_cdf_draws([F(1), F(1, 10**20)], 200000, 3)
+check("P4 LIMIT: a POSITIVE weight below about 2^-53 of the total is never drawn (probability 0 under the float algorithm)", 1 not in tiny,
+      "weights (1, 1e-20): 200,000 draws, outcome 1 never appears; the claimed error bound (2^-53) still holds, but 'proportional to weight' is not literally true for such weights")
 check("P4 inverse_cdf_draws equals the first-index-with-cum>u rule for 30 seeds", not any(x[0] == "P4 rule" for x in bad))
 two53 = F(1, G)
 check("P4 FINDING: worst per-boundary deviation from the ideal law", worst <= 2 * two53,
