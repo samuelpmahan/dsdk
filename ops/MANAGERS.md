@@ -12,7 +12,7 @@ Two long-lived Sonnet managers. Opus orchestrates. Sam sets direction only.
    - Verify every Haiku claim yourself by re-running its done command with `.venv/bin/python -m pytest`.
    - Log every Haiku attempt with `python ops/ledger.py log <task> haiku <attempt> <pass|fail|partial|error> <wall_s> --tests P/T --round <n> --note "<manager>: ..."`.
    - Haiku gets 2 attempts per card. After a second failure, take the card yourself and add a row to `ops/haiku-limits.md`.
-2. **Keep your 2 Haiku slots full** whenever ready cards exist.
+2. **Keep your 2 Haiku slots full** whenever ready cards exist. (Checked 2026-10-09: subagent managers have no Agent tool, so they always use the queue path below. Opus dispatches from `ops/queue/` on every wake.)
    - Dispatch with the Agent tool: `model: haiku`, `subagent_type: general-purpose`, `run_in_background: true`.
    - Use the implementer prompt below.
    - If you cannot spawn agents, append ready cards to `ops/queue/<F|W>.md` and Opus will dispatch them.
