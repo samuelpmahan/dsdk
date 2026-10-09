@@ -1,5 +1,11 @@
 # ops — how work gets dispatched
 
+Operating rule (from Sam, 2026-10-08)
+- This is a long-running curriculum. **The planner never blocks on approval between tracks.**
+  When one track is green, the next contracts are already in flight. Work that only Sam can do
+  (proofs, explain-backs, domain choices) goes into `ops/for-sam.md` as a queue. The pipeline
+  does not wait on it. A choice Sam has not made gets the documented default and a note there.
+
 Roles
 - **Opus (planner)**: plans, reviews, arbitrates, commits.
 - **Sonnet (contract author)**: writes interface stubs + adversarial *and* explainable tests. Never implements.

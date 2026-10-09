@@ -14,3 +14,13 @@ track = "A1"
 order = 1
 min_imports = 1
 waiver = "Only dsdk.core exists before A1; from A2 onward the minimum is 2."
+
+[packages."dsdk.lang"]
+track = "A2"
+order = 2
+min_imports = 2
+
+[packages."dsdk.graph"]
+track = "A5"
+order = 3
+min_imports = 2
