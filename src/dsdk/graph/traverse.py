@@ -172,7 +172,39 @@ def find_cycle(g: Graph) -> tuple[Hashable, ...] | None:
     back edge. Directed self-loop at ``u``: ``(u, u)``. Undirected graphs have no duplicate edges (they were
     merged), so skipping the DFS parent is exactly right.
     """
-    raise NotImplementedError
+    on_stack, finished = 0, 1
+    state: dict[Hashable, int] = {}
+    parent: dict[Hashable, Hashable | None] = {}
+    for root in g.nodes:
+        if root in state:
+            continue
+        state[root] = on_stack
+        parent[root] = None
+        path: list[Hashable] = [root]
+        pos: dict[Hashable, int] = {root: 0}
+        stack = [(root, iter(g.neighbors(root)))]
+        while stack:
+            u, neighbours = stack[-1]
+            pushed = False
+            for w in neighbours:
+                if w in state:
+                    is_parent_edge = (not g.directed) and w == parent[u] and w != u
+                    if state[w] == on_stack and not is_parent_edge:
+                        return tuple(path[pos[w]:]) + (w,)
+                    continue  # finished node, or the edge we just came along
+                state[w] = on_stack
+                parent[w] = u
+                pos[w] = len(path)
+                path.append(w)
+                stack.append((w, iter(g.neighbors(w))))
+                pushed = True
+                break
+            if not pushed:
+                stack.pop()
+                state[u] = finished
+                path.pop()
+                del pos[u]
+    return None
 
 
 def topological_order(g: Graph) -> tuple[Hashable, ...]:
@@ -187,7 +219,24 @@ def topological_order(g: Graph) -> tuple[Hashable, ...]:
     Example: edges ``c->a, c->b`` with node order ``a, b, c`` gives ``(c, a, b)``.
     The empty graph gives ``()``.
     """
-    raise NotImplementedError
+    if not g.directed:
+        raise GraphError("topological_order needs a directed graph")
+    import heapq
+
+    indegree = {v: len(g.predecessors(v)) for v in g.nodes}
+    ready = [i for i, v in enumerate(g.nodes) if indegree[v] == 0]
+    heapq.heapify(ready)
+    order: list[Hashable] = []
+    while ready:
+        node = g.nodes[heapq.heappop(ready)]
+        order.append(node)
+        for succ in g.neighbors(node):
+            indegree[succ] -= 1
+            if indegree[succ] == 0:
+                heapq.heappush(ready, g.index_of(succ))
+    if len(order) < len(g.nodes):
+        raise CycleError(find_cycle(g))
+    return tuple(order)
 
 
 def components(g: Graph) -> tuple[tuple[Hashable, ...], ...]:
@@ -197,7 +246,28 @@ def components(g: Graph) -> tuple[tuple[Hashable, ...], ...]:
     the components are sorted by the node-order index of their first node. Isolated nodes are singleton
     components. The empty graph gives ``()``.
     """
-    raise NotImplementedError
+    label: dict[Hashable, int] = {}
+    for start in g.nodes:
+        if start in label:
+            continue
+        comp = len(label)  # placeholder id; canonical grouping below does not depend on it
+        label[start] = comp
+        queue: deque[Hashable] = deque([start])
+        while queue:
+            u = queue.popleft()
+            for v in (*g.neighbors(u), *g.predecessors(u)):
+                if v not in label:
+                    label[v] = comp
+                    queue.append(v)
+    return _group_by_label(g, label)
+
+
+def _group_by_label(g: Graph, label: dict[Hashable, Hashable]) -> tuple[tuple[Hashable, ...], ...]:
+    """Canonical grouping: nodes of each label in node order; groups ordered by their first node's index."""
+    groups: dict[Hashable, list[Hashable]] = {}
+    for n in g.nodes:
+        groups.setdefault(label[n], []).append(n)
+    return tuple(tuple(members) for members in groups.values())
 
 
 def strongly_connected_components(g: Graph) -> tuple[tuple[Hashable, ...], ...]:
@@ -213,4 +283,20 @@ def strongly_connected_components(g: Graph) -> tuple[tuple[Hashable, ...], ...]:
     in one component iff each reaches the other. For an UNDIRECTED graph the answer equals ``components(g)``.
     Must be iterative (2,000-node path / cycle).
     """
-    raise NotImplementedError
+    if not g.directed:
+        return components(g)
+    reverse = g.reverse()
+    label: dict[Hashable, int] = {}
+    for root in reversed(dfs_postorder(g)):
+        if root in label:
+            continue
+        comp = len(label)
+        label[root] = comp
+        stack = [root]
+        while stack:
+            u = stack.pop()
+            for v in reverse.neighbors(u):
+                if v not in label:
+                    label[v] = comp
+                    stack.append(v)
+    return _group_by_label(g, label)

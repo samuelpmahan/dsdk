@@ -27,11 +27,13 @@ So KNOWN False is possible ONLY in a closed world, and KNOWN True never needs th
 """
 from __future__ import annotations
 
+import heapq
 from typing import Hashable
 
 from dsdk.core import Judgment, Status
 
 from .model import Graph
+from .traverse import shortest_path
 
 UNCERTAIN: tuple[Status, ...] = (Status.UNKNOWN, Status.NOT_OBSERVED)
 """The edge statuses that do not count as observed."""
@@ -40,7 +42,12 @@ UNCERTAIN: tuple[Status, ...] = (Status.UNKNOWN, Status.NOT_OBSERVED)
 def known_subgraph(g: Graph) -> Graph:
     """A graph with the same ``nodes`` (same order, so isolated nodes survive), the same ``directed`` and
     ``closed_world`` flags, and only the edges whose evidence is ``Status.KNOWN``."""
-    raise NotImplementedError
+    return Graph.from_edges(
+        [e for e in g.edges if e.evidence is Status.KNOWN],
+        g.nodes,
+        directed=g.directed,
+        closed_world=g.closed_world,
+    )
 
 
 def candidate_path(g: Graph, source: Hashable, target: Hashable) -> tuple[Hashable, ...] | None:
@@ -57,10 +64,51 @@ def candidate_path(g: Graph, source: Hashable, target: Hashable) -> tuple[Hashab
     hops, adds 1 to the uncertain count iff the edge is not KNOWN, and appends the neighbour's index. (Extending
     two equal-length paths cannot reorder them, so this is exact.)
     """
-    raise NotImplementedError
+    start = g.index_of(source)
+    goal = g.index_of(target)
+    heap: list[tuple[int, int, tuple[int, ...]]] = [(0, 0, (start,))]
+    settled: set[int] = set()
+    while heap:
+        uncertain, hops, path = heapq.heappop(heap)
+        last = path[-1]
+        if last in settled:
+            continue
+        settled.add(last)
+        if last == goal:
+            return tuple(g.nodes[i] for i in path)
+        u = g.nodes[last]
+        for v in g.neighbors(u):
+            j = g.index_of(v)
+            if j in settled:
+                continue
+            edge = g.get_edge(u, v)
+            extra = 1 if edge is not None and edge.evidence is not Status.KNOWN else 0
+            heapq.heappush(heap, (uncertain + extra, hops + 1, path + (j,)))
+    return None
 
 
 def reachable(g: Graph, source: Hashable, target: Hashable) -> Judgment:
     """Is ``target`` reachable from ``source``? See the decision table in the module docstring (exact reason
     strings included). Directed graphs follow edge direction. Must not raise for any pair of query nodes."""
-    raise NotImplementedError
+    for node in (source, target):
+        if not g.has_node(node):
+            return Judgment(Status.INVALID, None, f"node {node!r} is not in the graph")
+
+    known_path = shortest_path(known_subgraph(g), source, target)
+    if known_path is not None:
+        return Judgment(Status.KNOWN, True, "known path: " + " -> ".join(str(n) for n in known_path))
+
+    best = candidate_path(g, source, target)
+    if best is not None:
+        parts = []
+        for u, v in zip(best, best[1:]):
+            edge = g.get_edge(u, v)
+            if edge is not None and edge.evidence is not Status.KNOWN:
+                parts.append(f"{u}->{v} ({edge.evidence.value})")
+        return Judgment(Status.UNKNOWN, None, "uncertain edges on best candidate path: " + ", ".join(parts))
+
+    if g.closed_world:
+        return Judgment(Status.KNOWN, False,
+                        f"closed world: no path from {source} to {target} even counting uncertain edges")
+    return Judgment(Status.UNKNOWN, None,
+                    "open world: no path found, but absence of an edge is not proof of impossibility")
