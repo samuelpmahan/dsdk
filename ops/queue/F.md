@@ -63,3 +63,11 @@ Today (stubs only): every file under tests/prob fails or errors at collection un
 | 6 | ops/tasks/T60-prob-ask-text.md | tests/integration/test_prob_text.py | all probability cards through the integration gate | `ask`, `ask_net`, `compare_text`, `observe_text`: text parsed by `dsdk.lang.parse_formula` (relaxed) then answered by `dsdk.prob`; parse errors become INVALID with the offset |
 
 Stubs and tests are in place (src/dsdk/prob/ask.py, tests/integration/test_prob_text.py, 43 tests, each running at least two layers on real output of the lower layer). When it passes, remove the `owed_to` line of `dsdk.lang` in tracks.toml, because tests/test_stack.py will then turn red (strict expected failure) until the waiver is gone.
+
+## Integration: graph witness paths as checked logic proofs (promoted dream, 2026-10-09)
+
+| Wave | Card file | Done command (tests) | Depends | What it builds |
+|---|---|---|---|---|
+| any | ops/tasks/T61-graph-witness-proofs.md | tests/integration/test_graph_proofs.py | none | `witness_proof`, `unreachability_countermodel`, `entailed_by_known_edges` in `src/dsdk/graph/proofs.py`: a graph read as implications; a witness path becomes a modus-ponens proof checked by `dsdk.logic.check`; non-reachability becomes a countermodel checked by `logic.evaluate`, `entails` and `countermodel` |
+
+Stub, tests (33, exhaustive up to 3 nodes plus a sample of 4-node graphs, Hypothesis on 5-node graphs with mixed edge evidence) and exports are in place. Only KNOWN edges ever become premises (same rule as `reachable`'s KNOWN True). Touches only the new module proofs.py; no other graph file needs editing.

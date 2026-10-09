@@ -12,10 +12,12 @@ Log results: `python ops/ledger.py log <task> haiku <attempt> <outcome> <wall_s>
   Today: 17 failed (all import_graph), 922 passed. Owns only src/dsdk/graph/bridges.py::import_graph.
   NOTE: the T26 tests read tracks.toml. Once dsdk.worlds is registered, `test_import_graph_nodes_are_exactly_the_registered_packages` also needs dsdk.worlds/prob/lang importable packages; dispatch T26 BEFORE any new package is registered, or after F/W stubs exist.
 
+## ON HOLD until Sam confirms the data sources (Opus, 2026-10-09). Contract, tests and cards are ready.
+
 ## READY (dsdk.worlds wave, 2026-10-09)
 
 Package registered in tracks.toml (order 5). Stubs + tests are in place; every test in tests/worlds currently fails on the stubs
-(a reference implementation passes 217/217; see tracks/W1 notes). Cards, in dispatch order. Slots: 2 at a time.
+(a reference implementation passes all 229; the 'next-track model' card T52 now also wires dsdk.prob and T53 calls dsdk.graph instead of searching itself). Cards, in dispatch order. Slots: 2 at a time.
 
 Wave 1 (dispatch together, different files):
 - [T50] ops/tasks/T50-worlds-lostlands-loader.md   done: `.venv/bin/python -m pytest tests/worlds/test_worlds_lostlands.py -q -k "not provenance"`
