@@ -22,3 +22,8 @@ Concurrency policy (AIMD):
 - Any attempt-2 failure, tool/proxy error (429 etc.), or review rejection: halve (floor 1).
 - A task that fails both Haiku attempts escalates to Sonnet and is logged as a *Haiku limit*
   (`ops/haiku-limits.md`) — that list is the point: it tells us what to stop handing Haiku.
+
+## How to report (Sam's rules, 2026-10-09)
+- **No bare IDs.** Never write a card number, finding code or agent name on its own ("T26", "N2", "#12"). Say what the thing is in words: "the import-graph builder", "the finding that dataclass equality differs on Python 3.13". A file:line may follow the description; it never replaces it.
+- **Overexplain, with evidence that can be cross-checked.** "N/N passed" is the compiler's job. For every claim, say: what is claimed, which tests support it (described in words), where to look (file:line, with a link if it is on GitHub), how we know the tests would catch a wrong implementation (killed mutants, described as the bug that was planted), and what is still not shown (survivors, gaps, assumptions).
+- **Evidence lives in the Lab,** the page Sam uses. Repo files are the source; the Lab is where claims are read. Anything that matters must be visible there.
