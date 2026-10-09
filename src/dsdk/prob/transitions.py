@@ -15,6 +15,7 @@ distribution (UNKNOWN), not an invented uniform one.
 """
 from __future__ import annotations
 
+import collections.abc
 import math
 from dataclasses import dataclass
 from fractions import Fraction
@@ -43,7 +44,7 @@ class NextTrackModel:
     def outgoing(self, track: str) -> int:
         """Total observed transitions out of ``track`` (``sum_z c(track, z)``); 0 if none. ``KeyError`` is NOT raised for a
         track outside the vocabulary: it simply has 0."""
-        raise NotImplementedError
+        return sum(n for (x, _), n in self.counts.items() if x == track)
 
 
 def fit_next_track(sequences: Iterable[Sequence[str]], alpha: object = 1, vocabulary: Iterable[str] | None = None) -> NextTrackModel:
@@ -56,7 +57,30 @@ def fit_next_track(sequences: Iterable[Sequence[str]], alpha: object = 1, vocabu
     Canonical track order: ``sorted(set(all tracks seen) | set(vocabulary))``. A sequence of length 0 or 1 adds no pair
     but its track (if any) is in the vocabulary. A repeat ``a, a`` counts as the pair ``(a, a)``.
     """
-    raise NotImplementedError
+    smoothing = to_weight(alpha, "alpha")
+    seen: set[str] = set()
+    counts: dict[tuple[str, str], int] = {}
+    for seq in sequences:
+        if isinstance(seq, str) or not isinstance(seq, collections.abc.Sequence):
+            raise TypeError(f"each sequence must be a list or tuple of tracks, not {type(seq).__name__}")
+        for track in seq:
+            _check_track(track, "track")
+            seen.add(track)
+        for x, y in zip(seq, seq[1:]):
+            counts[(x, y)] = counts.get((x, y), 0) + 1
+    if vocabulary is not None:
+        for track in vocabulary:
+            _check_track(track, "vocabulary track")
+            seen.add(track)
+    return NextTrackModel(tuple(sorted(seen)), counts, smoothing)
+
+
+def _check_track(track: object, what: str) -> None:
+    """``TypeError`` unless ``track`` is a non-empty ``str``."""
+    if not isinstance(track, str):
+        raise TypeError(f"{what} must be a str, not {type(track).__name__}: {track!r}")
+    if track == "":
+        raise ValueError(f"{what} must be a non-empty str")
 
 
 def model_from_graph(g: Graph, alpha: object = 1, include_uncertain: bool = False) -> NextTrackModel:
@@ -69,13 +93,48 @@ def model_from_graph(g: Graph, alpha: object = 1, include_uncertain: bool = Fals
     a ``TypeError``; any other weight must be a positive whole number, else ``ValueError`` (``2.5``, ``0`` and ``-1`` are rejected;
     a float with a whole value such as ``3.0`` is accepted as 3). ``alpha`` as in :func:`fit_next_track`.
     """
-    raise NotImplementedError
+    if not isinstance(g, Graph):
+        raise TypeError(f"g must be a Graph, not {type(g).__name__}")
+    if not g.directed:
+        raise ValueError("the transition graph must be directed")
+    for node in g.nodes:
+        _check_track(node, "node")
+    smoothing = to_weight(alpha, "alpha")
+    counts: dict[tuple[str, str], int] = {}
+    for e in g.edges:
+        if e.evidence is not Status.KNOWN and not include_uncertain:
+            continue
+        w = e.weight
+        if w is None:
+            n = 1
+        else:
+            if isinstance(w, bool):
+                raise TypeError(f"edge weight must be a number, not bool: {w!r}")
+            try:
+                whole = float(w).is_integer()
+            except (TypeError, ValueError) as exc:
+                raise TypeError(f"edge weight must be a number, not {type(w).__name__}") from exc
+            if not whole or w < 1:
+                raise ValueError(f"edge weight must be a positive whole number, got {w!r}")
+            n = int(w)
+        key = (e.source, e.target)
+        counts[key] = counts.get(key, 0) + n
+    return NextTrackModel(tuple(g.nodes), counts, smoothing)
 
 
 def _row(model: NextTrackModel, track: str) -> Judgment | list[Fraction]:
     """Shared by the public functions: the smoothed probabilities of ``track``'s successors in canonical order, or the Judgment
     explaining why there is none."""
-    raise NotImplementedError
+    if track not in model.tracks:
+        return Judgment(Status.NOT_OBSERVED, None, f"track {track!r} is not in the model's vocabulary")
+    out = model.outgoing(track)
+    denominator = out + model.alpha * len(model.tracks)
+    if denominator == 0:
+        return Judgment(
+            Status.UNKNOWN, None,
+            f"no successor distribution for {track!r}: nothing was observed after it and alpha is 0",
+        )
+    return [(model.counts.get((track, y), 0) + model.alpha) / denominator for y in model.tracks]
 
 
 def next_track_distribution(model: NextTrackModel, track: str) -> Judgment:
@@ -87,14 +146,33 @@ def next_track_distribution(model: NextTrackModel, track: str) -> Judgment:
                         With alpha = 0 the unseen successors appear with ``Fraction(0)``.
     ``TypeError`` for a non-model or a non-str track.
     """
-    raise NotImplementedError
+    if not isinstance(model, NextTrackModel):
+        raise TypeError(f"model must be a NextTrackModel, not {type(model).__name__}")
+    if not isinstance(track, str):
+        raise TypeError(f"track must be a str, not {type(track).__name__}")
+    row = _row(model, track)
+    if isinstance(row, Judgment):
+        return row
+    return Judgment(Status.KNOWN, tuple(zip(model.tracks, row)), "")
 
 
 def top_next(model: NextTrackModel, track: str, k: int) -> Judgment:
     """The ``k`` most likely successors: ``KNOWN`` with a tuple of at most ``k`` ``(track_id, Fraction)`` sorted by probability
     DESCENDING, ties broken by canonical order; zero-probability entries are dropped (so alpha = 0 may give fewer than ``k``).
     Non-KNOWN distributions are returned as they are. ``k`` must be an int >= 1 (bool rejected; ``TypeError``/``ValueError``)."""
-    raise NotImplementedError
+    if isinstance(k, bool) or not isinstance(k, int):
+        raise TypeError(f"k must be an int, not {type(k).__name__}")
+    if k < 1:
+        raise ValueError(f"k must be at least 1, got {k}")
+    dist = next_track_distribution(model, track)
+    if dist.status is not Status.KNOWN:
+        return dist
+    index = {t: i for i, t in enumerate(model.tracks)}
+    ranked = sorted(
+        ((t, p) for t, p in dist.value if p > 0),
+        key=lambda item: (-item[1], index[item[0]]),
+    )
+    return Judgment(Status.KNOWN, tuple(ranked[:k]), "")
 
 
 def sample_next_tracks(model: NextTrackModel, track: str, n: int, seed: int) -> Judgment:

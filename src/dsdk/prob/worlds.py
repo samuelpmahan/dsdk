@@ -182,7 +182,15 @@ def reweight(b: Belief, likelihood: Callable[[dict[str, bool]], object]) -> Beli
     ``b`` is not changed. ``TypeError`` if ``b`` is not a Belief or ``likelihood`` is not callable; a bad return value raises
     as in ``to_weight``.
     """
-    raise NotImplementedError
+    if not isinstance(b, Belief):
+        raise TypeError(f"reweight() takes a Belief, not {type(b).__name__}")
+    if not callable(likelihood):
+        raise TypeError(f"likelihood must be callable, not {type(likelihood).__name__}")
+    worlds = []
+    for w in b.worlds:
+        factor = to_weight(likelihood(w.assignment()), "likelihood")
+        worlds.append(WeightedWorld(w.values, w.weight * factor))
+    return Belief(b.variables, tuple(worlds))
 
 
 def condition(b: Belief, evidence: Formula) -> Belief:
@@ -193,7 +201,14 @@ def condition(b: Belief, evidence: Formula) -> Belief:
     :class:`UnmodelledVariableError` if ``evidence`` mentions a variable not in ``b.variables``.
     Implemented with :func:`reweight` (indicator likelihood), so conditioning twice is the same as conditioning on the ``And``.
     """
-    raise NotImplementedError
+    if not isinstance(b, Belief):
+        raise TypeError(f"condition() takes a Belief, not {type(b).__name__}")
+    if not isinstance(evidence, Formula):
+        raise TypeError(f"evidence must be a Formula, not {type(evidence).__name__}")
+    missing = set(variables(evidence)) - set(b.variables)
+    if missing:
+        raise UnmodelledVariableError(tuple(sorted(missing)))
+    return reweight(b, lambda a: 1 if evaluate(evidence, a) else 0)
 
 
 def probability(b: Belief, query: Formula, given: Formula | None = None) -> Judgment:
@@ -208,17 +223,52 @@ def probability(b: Belief, query: Formula, given: Formula | None = None) -> Judg
     * Otherwise ``KNOWN`` with the ``Fraction`` ``mass(query & given) / mass(given)`` (or ``mass(query) / total``).
       The value ``Fraction(0)`` and ``Fraction(1)`` are legitimate KNOWN answers.
     """
-    raise NotImplementedError
+    if not isinstance(b, Belief):
+        raise TypeError(f"probability() takes a Belief, not {type(b).__name__}")
+    if not isinstance(query, Formula):
+        raise TypeError(f"query must be a Formula, not {type(query).__name__}")
+    if given is not None and not isinstance(given, Formula):
+        raise TypeError(f"given must be a Formula or None, not {type(given).__name__}")
+    mentioned = set(variables(query))
+    if given is not None:
+        mentioned |= set(variables(given))
+    missing = mentioned - set(b.variables)
+    if missing:
+        return Judgment(Status.UNKNOWN, None, "unmodelled variables: " + ", ".join(sorted(missing)))
+    if given is None:
+        denominator = b.total
+        if denominator == 0:
+            return Judgment(Status.INVALID, None, "belief has zero total weight: the probability is undefined")
+        return Judgment(Status.KNOWN, b.mass(query) / denominator, "")
+    denominator = b.mass(given)
+    if denominator == 0:
+        return Judgment(Status.INVALID, None, "evidence has probability zero: the conditional probability is undefined")
+    return Judgment(Status.KNOWN, b.mass(And(query, given)) / denominator, "")
 
 
 def marginals(b: Belief) -> Judgment:
     """``P(v is true)`` for every variable: ``KNOWN`` with a ``dict {name: Fraction}`` (keys in ``b.variables`` order),
     or ``INVALID`` (reason mentions "zero total weight") if ``b.total == 0``. A belief over no variables gives ``{}``
     when it has total > 0. ``TypeError`` for a non-Belief."""
-    raise NotImplementedError
+    if not isinstance(b, Belief):
+        raise TypeError(f"marginals() takes a Belief, not {type(b).__name__}")
+    total = b.total
+    if total == 0:
+        return Judgment(Status.INVALID, None, "belief has zero total weight: marginals are undefined")
+    table: dict[str, Fraction] = {}
+    for i, name in enumerate(b.variables):
+        true_mass = sum((w.weight for w in b.worlds if w.values[i][1]), Fraction(0))
+        table[name] = true_mass / total
+    return Judgment(Status.KNOWN, table, "")
 
 
 def normalise(b: Belief) -> Judgment:
     """``KNOWN`` with a new Belief whose weights are ``weight / total`` (so ``total == 1``, same worlds, same order),
     or ``INVALID`` (reason mentions "zero total weight") when ``b.total == 0``. ``TypeError`` for a non-Belief."""
-    raise NotImplementedError
+    if not isinstance(b, Belief):
+        raise TypeError(f"normalise() takes a Belief, not {type(b).__name__}")
+    total = b.total
+    if total == 0:
+        return Judgment(Status.INVALID, None, "belief has zero total weight: cannot normalise")
+    worlds = tuple(WeightedWorld(w.values, w.weight / total) for w in b.worlds)
+    return Judgment(Status.KNOWN, Belief(b.variables, worlds), "")
