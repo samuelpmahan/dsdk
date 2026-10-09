@@ -8,13 +8,14 @@ Everything is iterative (no recursion): lineage chains and formulas can be deepe
 """
 from __future__ import annotations
 
+from collections import deque
 from pathlib import Path
 from typing import Hashable
 
 from dsdk.core import Part, PxC
-from dsdk.logic import And, Formula, Iff, Implies, Not, Or
+from dsdk.logic import And, Const, Formula, Iff, Implies, Not, Or, Var
 
-from .model import Graph
+from .model import Edge, Graph
 
 CALCULATION_LABEL = "<calculation>"
 """Edge label of the edge from a calculation Part to the Part it produced (input edges carry the input NAME)."""
@@ -27,6 +28,48 @@ FORMULA_CHILD_LABELS: dict[type, tuple[str, ...]] = {
     Iff: ("left", "right"),
 }
 """Child field names, in child order, of each non-leaf formula class. ``Const`` and ``Var`` are leaves."""
+
+
+def _lineage_walk(start: Part, seen: set, nodes: list, edges: list) -> None:
+    """Breadth-first walk backwards from ``start``, appending new Parts to ``nodes`` and new edges to ``edges``.
+
+    ``seen`` is shared between walks so that a Part reached again is not listed or expanded twice.
+    """
+    if start in seen:
+        return
+    seen.add(start)
+    nodes.append(start)
+    queue: deque[Part] = deque([start])
+    while queue:
+        out = queue.popleft()
+        comp = out.composition
+        if comp is None:
+            continue
+        upstream = [comp.calculation, *comp.inputs.values()]
+        edges.append(Edge(comp.calculation, out, label=CALCULATION_LABEL))
+        for name, inp in comp.inputs.items():
+            edges.append(Edge(inp, out, label=name))
+        for p in upstream:
+            if p not in seen:
+                seen.add(p)
+                nodes.append(p)
+                queue.append(p)
+
+
+def _formula_preorder(f: Formula) -> list[tuple[Formula, int | None, str | None]]:
+    """Preorder rows ``(node, parent_id, field_label)``; the index in the list is the node id.
+
+    Iterative (explicit stack): children are pushed in reverse so the left child is numbered first.
+    """
+    rows: list[tuple[Formula, int | None, str | None]] = []
+    stack: list[tuple[Formula, int | None, str | None]] = [(f, None, None)]
+    while stack:
+        node, parent, label = stack.pop()
+        my_id = len(rows)
+        rows.append((node, parent, label))
+        for name in reversed(FORMULA_CHILD_LABELS.get(type(node), ())):
+            stack.append((getattr(node, name), my_id, name))
+    return rows
 
 
 def lineage_graph(part: Part) -> Graph:
@@ -50,7 +93,12 @@ def lineage_graph(part: Part) -> Graph:
     (the composition record is complete). A raw Part gives a one-node graph with no edges.
     ``TypeError`` if ``part`` is not a ``Part``.
     """
-    raise NotImplementedError
+    if not isinstance(part, Part):
+        raise TypeError(f"expected a Part, got {type(part).__name__}")
+    nodes: list = []
+    edges: list = []
+    _lineage_walk(part, set(), nodes, edges)
+    return Graph.from_edges(edges, nodes, directed=True, closed_world=True)
 
 
 def store_lineage_graph(store: PxC) -> Graph:
@@ -61,7 +109,14 @@ def store_lineage_graph(store: PxC) -> Graph:
     only staged, or whose compose failed, are not in the store and not in the graph. ``TypeError`` for a
     non-``PxC``.
     """
-    raise NotImplementedError
+    if not isinstance(store, PxC):
+        raise TypeError(f"expected a PxC, got {type(store).__name__}")
+    seen: set = set()
+    nodes: list = []
+    edges: list = []
+    for _, part in store.entries():
+        _lineage_walk(part, seen, nodes, edges)
+    return Graph.from_edges(edges, nodes, directed=True, closed_world=True)
 
 
 def formula_graph(f: Formula) -> Graph:
@@ -78,14 +133,28 @@ def formula_graph(f: Formula) -> Graph:
     equals the height of the formula (a leaf has height 0, ``Not(x)`` has height ``1 + height(x)``, a binary node
     ``1 + max`` of its children). ``TypeError`` if ``f`` is not a ``Formula``. Must handle 2,000-deep formulas.
     """
-    raise NotImplementedError
+    if not isinstance(f, Formula):
+        raise TypeError(f"expected a Formula, got {type(f).__name__}")
+    rows = _formula_preorder(f)
+    edges = [Edge(parent, my_id, label=label) for my_id, (_, parent, label) in enumerate(rows) if parent is not None]
+    return Graph.from_edges(edges, range(len(rows)), directed=True, closed_world=True)
 
 
 def formula_labels(f: Formula) -> tuple[str, ...]:
     """Human-readable label of each node of :func:`formula_graph`, indexed by node id: the class name for
     operators (``"And"``, ``"Not"``, ...), ``"Var:a"`` for ``Var("a")``, ``"Const:True"`` / ``"Const:False"`` for
     constants. ``len(result) == size(f)``."""
-    raise NotImplementedError
+    if not isinstance(f, Formula):
+        raise TypeError(f"expected a Formula, got {type(f).__name__}")
+    labels: list[str] = []
+    for node, _, _ in _formula_preorder(f):
+        if isinstance(node, Var):
+            labels.append(f"Var:{node.name}")
+        elif isinstance(node, Const):
+            labels.append(f"Const:{node.value}")
+        else:
+            labels.append(type(node).__name__)
+    return tuple(labels)
 
 
 def import_graph(package_root: str | Path) -> Graph:
