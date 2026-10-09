@@ -30,3 +30,9 @@ Wave 3 (after T50, T51, T52, T54 are green; same file as T52, so strictly after 
 
 Each card also requires `.venv/bin/python -m pytest tests/core tests/logic tests/graph tests/test_reuse.py -q` to stay green.
 Test file sizes: all of tests/worlds takes ~30 s. Haiku must NOT edit tests/worlds/*, fixtures/worlds/*, or tracks.toml.
+
+## READY, not on hold (Opus, 2026-10-09): dsdk.prob made load-bearing through the build ledger
+- [T55] ops/tasks/T55-worlds-buildlog-summary.md   done: `.venv/bin/python -m pytest tests/worlds/test_worlds_buildlog_summary.py tests/worlds/test_worlds_buildlog.py -q`
+  Adds only two functions to the verified buildlog.py. Needs no Lost Lands data decision. When it passes, tests/test_stack.py's strict
+  waiver "prob owed to worlds" flips (xpass-strict), and Opus removes it. tools/lab/build_lab.py already calls these functions: until the
+  card lands the Lab shows "waiting for dsdk" for the first-try tiles; after, it shows dsdk's numbers plus "page recomputes: agree".

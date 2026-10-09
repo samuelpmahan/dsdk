@@ -17,4 +17,6 @@ code = textwrap.dedent('''
 ''')
 r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
 print(r.stdout[-700:])
+if r.returncode and "COUNTEREXAMPLE" not in r.stdout:
+    print(r.stderr[-800:])
 sys.exit(0 if r.returncode != 0 and "COUNTEREXAMPLE" in r.stdout else 1)
