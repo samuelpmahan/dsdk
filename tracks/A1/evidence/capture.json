@@ -1,7 +1,7 @@
 {
  "track": "A1",
- "captured_at": "2026-10-09T00:28:05.962Z",
- "git_sha": "2f7943b2ae81881df5b7174d7121acaad933f361",
+ "captured_at": "2026-10-09T00:28:46.386Z",
+ "git_sha": "1e53b4d551d3f50dfac6f080292911bbf1b96eb6",
  "browser": {
   "name": "chromium",
   "version": "141.0.7390.37"
@@ -11,10 +11,10 @@
   "height": 900
  },
  "packet": "tracks/A1/evidence/packet.json",
- "assertions_total": 28,
- "assertions_passed": 26,
- "assertions_failed": 2,
- "ok": false,
+ "assertions_total": 29,
+ "assertions_passed": 29,
+ "assertions_failed": 0,
+ "ok": true,
  "assertions": [
   {
    "name": "viewer loaded the packet without a load error",
@@ -43,7 +43,7 @@
   },
   {
    "name": "cross-check: marks are actually present (not vacuous)",
-   "passed": false,
+   "passed": true,
    "detail": "agree=90"
   },
   {
@@ -64,12 +64,12 @@
   {
    "name": "provenance footer shows a 40-hex git sha",
    "passed": true,
-   "detail": "ccb3e3edbcd0c234146ca5e86e93e5d6df112c69"
+   "detail": "1e53b4d551d3f50dfac6f080292911bbf1b96eb6"
   },
   {
    "name": "provenance footer shows the generated time",
    "passed": true,
-   "detail": "2026-10-09T00:26:14Z"
+   "detail": "2026-10-09T00:28:44Z"
   },
   {
    "name": "truth table: textual result present",
@@ -132,9 +132,14 @@
    "detail": ""
   },
   {
-   "name": "partial eval: KNOWN false for false AND x and UNKNOWN for x OR ~x",
-   "passed": false,
-   "detail": "Partial evaluation Strong Kleene: a value is KNOWN only when the known parts decide it; otherwise UNKNOWN, with the unassigned variables listed. Strong-Kleene partial evaluation, Python vs JS Case Formula Assignment Python JS Check Why false_and_unknown (false & x) (empty) KNOWN false KNOWN false ag"
+   "name": "partial eval: false AND x is KNOWN false in Python and JS",
+   "passed": true,
+   "detail": "KNOWN false / KNOWN false"
+  },
+  {
+   "name": "partial eval: x OR ~x is UNKNOWN (unassigned: x) in Python and JS",
+   "passed": true,
+   "detail": "UNKNOWN (unassigned: x) / UNKNOWN (unassigned: x)"
   },
   {
    "name": "induction: states that checks do not prove the claims and PROOFS.md does",

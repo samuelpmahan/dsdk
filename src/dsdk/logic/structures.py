@@ -41,14 +41,22 @@ def _fold(t: Tree, leaf: Any, combine: Any) -> Any:
 
 
 class Tree:
-    """Base class for binary trees. Never instantiate directly."""
+    """Abstract sum type: a Tree is a Leaf or a Node. Never instantiate directly."""
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Tree:
+        # Tree() and Tree.__new__(Tree) must fail; Leaf and Node are subclasses and pass.
+        if cls is Tree:
+            raise TypeError("Tree is abstract; instantiate Leaf or Node")
+        return super().__new__(cls)
 
     def __post_init__(self) -> None:
+        if type(self) is Tree:
+            raise TypeError("Tree is abstract; instantiate Leaf or Node")
         # Only Node validates its children; Leaf accepts any value.
         if isinstance(self, Node):
             for child in (self.left, self.right):
-                if not isinstance(child, Tree):
-                    raise TypeError(f"Node children must be Tree, got {type(child).__name__}")
+                if not isinstance(child, (Leaf, Node)):
+                    raise TypeError(f"Node children must be Leaf or Node, got {type(child).__name__}")
 
 
 @dataclass(frozen=True)

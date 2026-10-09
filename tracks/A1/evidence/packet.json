@@ -2,7 +2,7 @@
  "packet_version": "1",
  "track": "A1",
  "title": "A1 logic evidence packet",
- "generated_at": "2026-10-09T00:26:14Z",
+ "generated_at": "2026-10-09T00:28:44Z",
  "question": {
   "text": "Do dsdk.logic's truth tables, model counts, entailment verdicts, strong-Kleene partial evaluation and proof checker give the right answers, as judged by an independently generated oracle and an independent JS reimplementation?",
   "competing_explanations": [
@@ -350,7 +350,7 @@
   ]
  },
  "run_record": {
-  "git_sha": "ccb3e3edbcd0c234146ca5e86e93e5d6df112c69",
+  "git_sha": "1e53b4d551d3f50dfac6f080292911bbf1b96eb6",
   "git_branch": "claude/friendly-cray-zex2o8",
   "working_tree_dirty": true,
   "environment": {
@@ -387,7 +387,7 @@
     "target": "tests/logic",
     "command": "python -m pytest -q tests/logic",
     "exit_code": 0,
-    "summary": "472 passed in 3.88s",
+    "summary": "472 passed in 3.89s",
     "passed": 472,
     "failed": 0
    },
@@ -395,7 +395,7 @@
     "target": "tests/core",
     "command": "python -m pytest -q tests/core",
     "exit_code": 0,
-    "summary": "189 passed in 0.75s",
+    "summary": "189 passed in 0.71s",
     "passed": 189,
     "failed": 0
    }
@@ -407,7 +407,7 @@
    }
   ],
   "uncertainty": "No statistical uncertainty: every value is exact (finite enumeration). The residual uncertainty is correctness of the oracle and of the shared conventions, addressed by the mutation check, the independent JS recomputation in the viewer, and the tamper control in capture.mjs.",
-  "timestamp": "2026-10-09T00:26:14Z"
+  "timestamp": "2026-10-09T00:28:44Z"
  },
  "browser_artifact": {
   "viewer": "viewer/index.html",

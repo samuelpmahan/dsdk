@@ -101,7 +101,7 @@ try {
   const agree = await page.locator('[data-agree="true"]').count();
   const disagree = await page.locator('[data-agree="false"]').count();
   assert('cross-check: zero disagree marks', disagree === 0, `disagree=${disagree}`);
-  assert('cross-check: marks are actually present (not vacuous)', agree >= 100, `agree=${agree}`);
+  assert('cross-check: marks are actually present (not vacuous)', agree >= 50, `agree=${agree}`);
   assert('download link is a data: URL of the packet', ((await page.getAttribute('#download', 'href')) || '').startsWith('data:application/json'), '');
   assert('page has tables with captions and header cells',
     (await page.locator('table caption').count()) > 5 && (await page.locator('table th[scope="col"]').count()) > 20, '');

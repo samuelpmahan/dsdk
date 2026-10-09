@@ -50,9 +50,12 @@ export async function run(ctx) {
   await shot('a1-proof-check.png');
 
   await openView('partial-eval');
-  const pe = await text('#view-partial-eval');
-  assert('partial eval: KNOWN false for false AND x and UNKNOWN for x OR ~x',
-    /false_and_unknown[^|]*KNOWN false/.test(pe) && /excluded_middle_unknown[^|]*UNKNOWN \(unassigned: x\)/.test(pe), pe.slice(0, 300));
+  const cell = (name, col) => text(`#view-partial-eval tr:has(th:text-is("${name}")) td:nth-child(${col})`);
+  const py1 = await cell('false_and_unknown', 4); const js1 = await cell('false_and_unknown', 5);
+  const py2 = await cell('excluded_middle_unknown', 4); const js2 = await cell('excluded_middle_unknown', 5);
+  assert('partial eval: false AND x is KNOWN false in Python and JS', py1 === 'KNOWN false' && js1 === 'KNOWN false', `${py1} / ${js1}`);
+  assert('partial eval: x OR ~x is UNKNOWN (unassigned: x) in Python and JS',
+    py2 === 'UNKNOWN (unassigned: x)' && js2 === 'UNKNOWN (unassigned: x)', `${py2} / ${js2}`);
   await shot('a1-partial-eval.png');
 
   await openView('induction');
