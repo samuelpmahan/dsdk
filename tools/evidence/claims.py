@@ -63,9 +63,15 @@ def run_junit(tests: str) -> dict[str, str]:
         func = re.sub(r"\[.*$", "", tc.get("name", ""))
         file = tc.get("classname", "").replace(".", "/")
         k = f"{file}::{func}"
-        bad = tc.find("failure") is not None or tc.find("error") is not None
+        hit = tc.find("failure") if tc.find("failure") is not None else tc.find("error")
+        if hit is None:
+            st = "pass"
+        else:
+            # a stub that is deliberately held (raises NotImplementedError) is "held", not broken; any other error is a failure
+            text = (hit.get("message") or "") + (hit.text or "")
+            st = "held" if "NotImplementedError" in text and "AssertionError" not in text else "fail"
         prev = out.get(k, "pass")
-        out[k] = "fail" if bad or prev == "fail" else "pass"
+        out[k] = max(prev, st, key=["pass", "held", "fail"].index)
     return out
 
 
@@ -136,14 +142,15 @@ def main() -> None:
                         "survived": mj["survived"], "git_sha": mj["git_sha"], "command": mj["command"], "planted": planted}
         n_claims = sum(len(s["claims"]) for m in modules for s in m["sections"])
         n_pass = sum(c["status"] == "pass" for m in modules for s in m["sections"] for c in s["claims"])
-        tracks.append({"package": pkg, "track": track, "about": PLAIN[pkg], "claims": n_claims, "passing": n_pass,
+        n_held = sum(c["status"] == "held" for m in modules for s in m["sections"] for c in s["claims"])
+        tracks.append({"package": pkg, "track": track, "about": PLAIN[pkg], "claims": n_claims, "passing": n_pass, "held": n_held,
                        "modules": modules, "mutation": mutation})
     out = ROOT / "lab/data/claims.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"tracks": tracks}, separators=(",", ":")))
     for t in tracks:
         mu = t["mutation"]
-        print(f"{t['package']}: {t['passing']}/{t['claims']} claims passing"
+        print(f"{t['package']}: {t['passing']}/{t['claims']} claims passing, {t['held']} held"
               + (f"; planted bugs {mu['killed']}/{mu['run']} caught" if mu else "; no mutation run yet"))
 
 

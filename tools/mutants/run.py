@@ -21,6 +21,7 @@ import json
 import os
 import random
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -167,15 +168,20 @@ def run_one(m: Mutant, src: str, tests: str, timeout: int) -> Mutant:
             shutil.copytree(ROOT / d, t / d, ignore=shutil.ignore_patterns("__pycache__", ".hypothesis"))
         shutil.copy(ROOT / "tracks.toml", t / "tracks.toml")
         shutil.copy(ROOT / "pyproject.toml", t / "pyproject.toml")
+        (t / "ops").mkdir()
+        shutil.copy(ROOT / "ops/ledger.jsonl", t / "ops/ledger.jsonl")
         (t / m.file).write_text(src)
         start = time.time()
         try:
-            r = subprocess.run([PY, "-m", "pytest", tests, "-x", "-q", "-p", "no:cacheprovider", "-p", "no:randomly"],
+            r = subprocess.run([PY, "-m", "pytest", *shlex.split(tests), "-x", "-q", "-p", "no:cacheprovider", "-p", "no:randomly"],
                                cwd=t, env=dict(os.environ, PYTHONPATH=str(t / "src"), HYPOTHESIS_PROFILE=os.environ.get("HYPOTHESIS_PROFILE", "")),
                                capture_output=True, text=True, timeout=timeout)
             m.seconds = round(time.time() - start, 1)
             if r.returncode == 0:
                 m.status = "survived"
+            elif r.returncode in (2, 3, 4, 5):
+                # interrupted / internal error / usage error / no tests collected: no test judged this mutant
+                m.status, m.killed_by = "invalid", f"pytest exit {r.returncode}: not a test failure"
             else:
                 m.status = "killed"
                 hit = re.search(r"^(?:FAILED|ERROR) (\S+)", r.stdout, re.M)
@@ -197,6 +203,9 @@ def main() -> None:
     mutants, sources, n_sites = build_mutants(pkg_dir, ROOT, a.max, a.seed)
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     print(f"{a.package}: {n_sites} mutation sites, running {len(mutants)} mutants with {a.workers} workers", flush=True)
+    base = run_one(Mutant(-1, mutants[0].file, 0, "baseline", "", ""), (ROOT / mutants[0].file).read_text(), a.tests, a.timeout)
+    if base.status != "survived":
+        sys.exit(f"baseline (no mutation) does not pass cleanly: {base.status} {base.killed_by}; refusing to score mutants")
     t0 = time.time()
     with cf.ThreadPoolExecutor(a.workers) as ex:
         futs = [ex.submit(run_one, m, sources[m.id][1], a.tests, a.timeout) for m in mutants]
@@ -205,12 +214,15 @@ def main() -> None:
             print(f"  #{m.id:3d} {m.status:8s} {m.file}:{m.line} {m.kind}", flush=True)
     mutants.sort(key=lambda m: m.id)
     killed = sum(m.status == "killed" for m in mutants)
+    invalid = sum(m.status == "invalid" for m in mutants)
+    if invalid:
+        sys.exit(f"{invalid} mutants were not judged by any test (pytest usage/collection error); not writing evidence")
     out = ROOT / "tracks" / track / "evidence"
     out.mkdir(parents=True, exist_ok=True)
     summary = {"package": a.package, "track": track, "tests": a.tests, "git_sha": sha, "seed": a.seed,
                "sites_total": n_sites, "mutants_run": len(mutants), "killed": killed,
                "survived": len(mutants) - killed, "minutes": round((time.time() - t0) / 60, 1),
-               "command": f".venv/bin/python tools/mutants/run.py {a.package} {a.tests} --max {a.max} --seed {a.seed}",
+               "command": f".venv/bin/python tools/mutants/run.py {a.package} {shlex.quote(a.tests)} --max {a.max} --seed {a.seed}",
                "mutants": [asdict(m) for m in mutants]}
     (out / "mutants.json").write_text(json.dumps(summary, indent=1))
     lines = [f"# Mutation evidence: {a.package} ({track})", "",

@@ -106,6 +106,7 @@ footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;fl
 .claims{list-style:none;margin:0;padding:0 12px 10px;display:grid;gap:8px}
 .claims li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 8px;font-size:14px}
 .claims .mk{font-family:var(--mono);font-weight:600}
+.claims .mk.held{color:var(--muted)}
 .claims .where{grid-column:2;font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .claims .where a{color:var(--muted)}
 .bug{border-left:3px solid var(--rule);padding:6px 10px;display:grid;gap:3px;font-size:14px;background:var(--rack)}
@@ -601,7 +602,7 @@ function renderBench(){
   }
   const t=LAB.claims.tracks.find(x=>x.package===benchTrack), mu=t.mutation;
   const sum=$('#bench-sum'); sum.replaceChildren();
-  sum.append(`${TRACK_NAMES[t.package]} is ${t.about}. `, el('b',{text:`${t.passing} of ${t.claims}`}), ' claims pass. ');
+  sum.append(`${TRACK_NAMES[t.package]} is ${t.about}. `, el('b',{text:`${t.passing} of ${t.claims}`}), ' claims pass. ', t.held?el('span',{text:`${t.held} more are held: their functions are deliberately left unwritten until you say which data sources are right, so their tests stop at "not implemented yet". `}):'', (t.claims-t.passing-(t.held||0))>0?el('b',{class:'no',text:`${t.claims-t.passing-(t.held||0)} fail${t.held?' (the checks that the held loaders call earlier dsdk code: true failures until those loaders are written)':''}. `}):'');
   if (mu){ sum.append('We planted ', el('b',{text:String(mu.run)}), ` bugs (sampled from ${mu.sites} possible sites in the shipped code); tests caught `, el('b',{text:String(mu.killed)}), mu.survived?`, and ${mu.survived} slipped through. Those are listed first.`:', all of them. '); }
   else sum.append('The planted-bug run for this part is still in progress. ');
   sum.append(' ', PROOF_NOTES[t.package]);
@@ -611,10 +612,10 @@ function renderBench(){
     const items=s.claims.filter(c=>!q || c.claim.toLowerCase().includes(q) || c.exercises.some(e=>e.name.toLowerCase().includes(q)));
     if(!items.length) continue; shown+=items.length;
     const d=el('details',{class:'clause'}); if(q) d.open=true;
-    const sm=el('summary',{}); sm.append(el('span',{text:s.name}), el('span',{class:'n',text:`${items.filter(c=>c.status==='pass').length}/${items.length} pass · ${m.file.split('/').pop()}`})); d.append(sm);
+    const sm=el('summary',{}); sm.append(el('span',{text:s.name}), el('span',{class:'n',text:`${items.filter(c=>c.status==='pass').length}/${items.length} pass${items.some(c=>c.status==='held')?` · ${items.filter(c=>c.status==='held').length} held`:''} · ${m.file.split('/').pop()}`})); d.append(sm);
     const ul=el('ul',{class:'claims'});
     for (const c of items){
-      const li=el('li',{}); li.append(el('span',{class:'mk '+(c.status==='pass'?'ok':'no'),text:c.status==='pass'?'✓':'✗'}), el('span',{text:c.claim}));
+      const li=el('li',{}); li.append(el('span',{class:'mk '+(c.status==='pass'?'ok':c.status==='held'?'held':'no'),title:c.status==='held'?'held: not implemented yet, waiting on your data-source answer':'',text:c.status==='pass'?'✓':c.status==='held'?'–':'✗'}), el('span',{text:c.claim}));
       const w=el('span',{class:'where'}); w.append('test ', link(c.link,c.where)); if(c.exercises.length){ w.append(' · checks '); c.exercises.forEach((e,i)=>{ if(i) w.append(', '); w.append(link(e.link,e.name)); }); }
       li.append(w); ul.append(li);
     }

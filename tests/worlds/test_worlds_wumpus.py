@@ -168,6 +168,18 @@ def test_a_fully_explored_cave_has_an_empty_frontier():
     assert j.status is Status.KNOWN and j.value.frontier == () and j.value.expected_pits == 0
 
 
+
+def test_contradictory_pit_percepts_are_invalid_not_a_number():
+    """Percepts no real cave can give: (1,2) has a breeze and (2,2) is its only unvisited neighbour, so a pit must be on (2,2); but (2,1) has no breeze, so (2,2) has no pit. The answer is INVALID with dsdk.prob's reason, never a made-up risk and never None."""
+    j = stuck_risk({(1, 1): NONE, (1, 2): BREEZE, (2, 1): NONE, (1, 3): NONE})
+    assert j is not None and j.status is Status.INVALID and j.value is None and j.reason
+
+
+def test_contradictory_wumpus_percepts_are_invalid_not_a_number():
+    """The same contradiction for the Wumpus: a stench at (1,2) with (2,2) its only unvisited neighbour, while (2,1) has no stench. INVALID with a reason."""
+    j = stuck_risk({(1, 1): NONE, (1, 2): STENCH, (2, 1): NONE, (1, 3): NONE})
+    assert j is not None and j.status is Status.INVALID and j.value is None and j.reason
+
 def brute_force(percepts):
     """Independent oracle: enumerate pit patterns on the frontier and the Wumpus square over ALL unvisited squares, keep those consistent with every percept."""
     visited = set(percepts)
