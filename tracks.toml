@@ -14,23 +14,29 @@ track = "A1"
 order = 1
 min_imports = 1
 waiver = "Only dsdk.core exists before A1; from A2 onward the minimum is 2."
+thin_owed = "only the kernel exists below logic; its verdict type is the whole dependency (structural, not a debt to pay)"
 
 [packages."dsdk.lang"]
 track = "A2"
 order = 2
 min_imports = 2
+owed_to = "dsdk.prob: probability queries written as text, parsed by the language package"
 
 [packages."dsdk.graph"]
 track = "A5"
 order = 3
 min_imports = 2
+thin_owed = "graph calls only the kernel's verdict and status types; owes a real use of logic or the kernel (e.g. witness paths recorded as Parts)"
 
 [packages."dsdk.worlds"]
 track = "W1"
 order = 5
 min_imports = 2
+thin_owed = "worlds networks must be built with dsdk.graph and fitted with dsdk.prob (cards written, held on the data-source decision)"
 
 [packages."dsdk.prob"]
 track = "A3"
 order = 4
 min_imports = 3
+
+owed_to = "dsdk.worlds: next-track model fitted on the Lost Lands transition network"
