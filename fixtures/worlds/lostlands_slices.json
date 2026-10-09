@@ -9185,6 +9185,693 @@
      "target": 511
     }
    ]
+  },
+  {
+   "source": 722,
+   "target": 166,
+   "status": "known",
+   "reason": "known path: 722 -> 723 -> 724 -> 237 -> 20 -> 37 -> 224 -> 166",
+   "path": [
+    722,
+    723,
+    724,
+    237,
+    20,
+    37,
+    224,
+    166
+   ],
+   "hops": [
+    {
+     "evidence": "known",
+     "count": 2,
+     "sets": [
+      [
+       20,
+       4
+      ],
+      [
+       28,
+       4
+      ]
+     ],
+     "source": 722,
+     "target": 723
+    },
+    {
+     "evidence": "known",
+     "count": 2,
+     "sets": [
+      [
+       20,
+       4
+      ],
+      [
+       28,
+       4
+      ]
+     ],
+     "source": 723,
+     "target": 724
+    },
+    {
+     "evidence": "known",
+     "count": 2,
+     "sets": [
+      [
+       20,
+       4
+      ],
+      [
+       28,
+       4
+      ]
+     ],
+     "source": 724,
+     "target": 237
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       34,
+       6
+      ]
+     ],
+     "source": 237,
+     "target": 20
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       6,
+       6
+      ]
+     ],
+     "source": 20,
+     "target": 37
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       6,
+       6
+      ]
+     ],
+     "source": 37,
+     "target": 224
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       29,
+       6
+      ]
+     ],
+     "source": 224,
+     "target": 166
+    }
+   ]
+  },
+  {
+   "source": 722,
+   "target": 0,
+   "status": "unknown",
+   "reason": "uncertain edges on best candidate path: 20->0 (unknown)",
+   "path": [
+    722,
+    723,
+    724,
+    237,
+    20,
+    0
+   ],
+   "hops": [
+    {
+     "evidence": "known",
+     "count": 2,
+     "sets": [
+      [
+       20,
+       4
+      ],
+      [
+       28,
+       4
+      ]
+     ],
+     "source": 722,
+     "target": 723
+    },
+    {
+     "evidence": "known",
+     "count": 2,
+     "sets": [
+      [
+       20,
+       4
+      ],
+      [
+       28,
+       4
+      ]
+     ],
+     "source": 723,
+     "target": 724
+    },
+    {
+     "evidence": "known",
+     "count": 2,
+     "sets": [
+      [
+       20,
+       4
+      ],
+      [
+       28,
+       4
+      ]
+     ],
+     "source": 724,
+     "target": 237
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       34,
+       6
+      ]
+     ],
+     "source": 237,
+     "target": 20
+    },
+    {
+     "evidence": "unknown",
+     "count": 1,
+     "sets": [
+      [
+       0,
+       5
+      ]
+     ],
+     "source": 20,
+     "target": 0
+    }
+   ]
+  },
+  {
+   "source": 109,
+   "target": 1132,
+   "status": "known",
+   "reason": "known path: 109 -> 110 -> 111 -> 112 -> 113 -> 114 -> 102 -> 115 -> 116 -> 117 -> 118 -> 119 -> 120 -> 71 -> 72 -> 121 -> 92 -> 93 -> 94 -> 95 -> 96 -> 535 -> 537 -> 279 -> 369 -> 718 -> 697 -> 1131 -> 1132",
+   "path": [
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    102,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    71,
+    72,
+    121,
+    92,
+    93,
+    94,
+    95,
+    96,
+    535,
+    537,
+    279,
+    369,
+    718,
+    697,
+    1131,
+    1132
+   ],
+   "hops": [
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 109,
+     "target": 110
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 110,
+     "target": 111
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 111,
+     "target": 112
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 112,
+     "target": 113
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 113,
+     "target": 114
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 114,
+     "target": 102
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 102,
+     "target": 115
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 115,
+     "target": 116
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 116,
+     "target": 117
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 117,
+     "target": 118
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 118,
+     "target": 119
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 119,
+     "target": 120
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 120,
+     "target": 71
+    },
+    {
+     "evidence": "known",
+     "count": 2,
+     "sets": [
+      [
+       2,
+       0
+      ],
+      [
+       2,
+       4
+      ]
+     ],
+     "source": 71,
+     "target": 72
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 72,
+     "target": 121
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       0
+      ]
+     ],
+     "source": 121,
+     "target": 92
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       4
+      ]
+     ],
+     "source": 92,
+     "target": 93
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       4
+      ]
+     ],
+     "source": 93,
+     "target": 94
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       4
+      ]
+     ],
+     "source": 94,
+     "target": 95
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       2,
+       4
+      ]
+     ],
+     "source": 95,
+     "target": 96
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       17,
+       3
+      ]
+     ],
+     "source": 96,
+     "target": 535
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       44,
+       6
+      ]
+     ],
+     "source": 535,
+     "target": 537
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       24,
+       4
+      ]
+     ],
+     "source": 537,
+     "target": 279
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       20,
+       4
+      ]
+     ],
+     "source": 279,
+     "target": 369
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       20,
+       4
+      ]
+     ],
+     "source": 369,
+     "target": 718
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       39,
+       5
+      ]
+     ],
+     "source": 718,
+     "target": 697
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       39,
+       5
+      ]
+     ],
+     "source": 697,
+     "target": 1131
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       39,
+       5
+      ]
+     ],
+     "source": 1131,
+     "target": 1132
+    }
+   ]
+  },
+  {
+   "source": 12,
+   "target": 722,
+   "status": "known",
+   "reason": "known path: 12 -> 422 -> 259 -> 373 -> 512 -> 158 -> 721 -> 722",
+   "path": [
+    12,
+    422,
+    259,
+    373,
+    512,
+    158,
+    721,
+    722
+   ],
+   "hops": [
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       32,
+       4
+      ]
+     ],
+     "source": 12,
+     "target": 422
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       13,
+       5
+      ]
+     ],
+     "source": 422,
+     "target": 259
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       29,
+       6
+      ]
+     ],
+     "source": 259,
+     "target": 373
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       39,
+       5
+      ]
+     ],
+     "source": 373,
+     "target": 512
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       17,
+       3
+      ]
+     ],
+     "source": 512,
+     "target": 158
+    },
+    {
+     "evidence": "known",
+     "count": 2,
+     "sets": [
+      [
+       20,
+       4
+      ],
+      [
+       39,
+       5
+      ]
+     ],
+     "source": 158,
+     "target": 721
+    },
+    {
+     "evidence": "known",
+     "count": 1,
+     "sets": [
+      [
+       20,
+       4
+      ]
+     ],
+     "source": 721,
+     "target": 722
+    }
+   ]
   }
  ]
 }

@@ -24,3 +24,13 @@ min_imports = 2
 track = "A5"
 order = 3
 min_imports = 2
+
+[packages."dsdk.worlds"]
+track = "W1"
+order = 5
+min_imports = 2
+
+[packages."dsdk.prob"]
+track = "A3"
+order = 4
+min_imports = 3

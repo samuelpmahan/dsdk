@@ -219,6 +219,11 @@ for a, b in combinations(range(len(GRP)), 2):
 rng = random.Random(2018)
 pairs = [(0, 1), (7, 7), (483, 237), (5, 900), (100, 1300), (0, 1351), (1351, 0)]
 pairs += [(rng.randrange(N), rng.randrange(N)) for _ in range(40)]
+# crowd-pleasers for the Lab demo (looked up by label so a person can read them)
+BY_LABEL = {label(i): i for i in range(N)}
+for a, b in [("Darude - Sandstorm", "Excision & Space Laces - 1 On 1"), ("Darude - Sandstorm", "Excision - Codename X (REMIX)"),
+             ("Rick Ross - Hustlin'", "Skrillex & Rick Ross - Purple Lamborghini (EDIT)"), ("Drake - God's Plan", "Darude - Sandstorm")]:
+    pairs.append((BY_LABEL[a], BY_LABEL[b]))
 cases = [degrees(s, t) for s, t in pairs]
 # make sure every category is represented
 kinds = Counter((c["status"], c["path"] is None, any(h["evidence"] == "unknown" for h in c["hops"])) for c in cases)

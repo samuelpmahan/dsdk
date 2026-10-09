@@ -1,0 +1,48 @@
+{
+ "package": "dsdk.lang",
+ "track": "A2",
+ "tests": "tests/lang",
+ "git_sha": "34fd121e2e10fbd5861eb2ccc99769fbaa79affc",
+ "seed": 20261009,
+ "sites_total": 592,
+ "mutants_run": 3,
+ "killed": 3,
+ "survived": 0,
+ "minutes": 0.1,
+ "command": ".venv/bin/python tools/mutants/run.py dsdk.lang tests/lang --max 3 --seed 20261009",
+ "mutants": [
+  {
+   "id": 0,
+   "file": "src/dsdk/lang/calc.py",
+   "line": 392,
+   "kind": "negate-if",
+   "before": "if kind == 'LET' and min_prec == 0:",
+   "after": "if not (kind == 'LET' and min_prec == 0):",
+   "status": "killed",
+   "killed_by": "tests/lang/test_bridge.py::test_source_round_trip_through_the_parser",
+   "seconds": 2.1
+  },
+  {
+   "id": 1,
+   "file": "src/dsdk/lang/calc.py",
+   "line": 443,
+   "kind": "int+1",
+   "before": "0",
+   "after": "1",
+   "status": "killed",
+   "killed_by": "tests/lang/test_calc_parse.py::test_comparison_is_non_associative",
+   "seconds": 2.7
+  },
+  {
+   "id": 2,
+   "file": "src/dsdk/lang/formula_syntax.py",
+   "line": 204,
+   "kind": "compare",
+   "before": "prec < min_prec",
+   "after": "prec <= min_prec",
+   "status": "killed",
+   "killed_by": "tests/lang/test_formula_syntax.py::test_relaxed_precedence_and_associativity[a",
+   "seconds": 7.2
+  }
+ ]
+}

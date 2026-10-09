@@ -23,10 +23,24 @@ const TAMPER = '/__tampered/packet.json';
 
 // Tiny static server. In-memory tampered packet: the first truth-table row value of the first case is flipped, so a
 // viewer that really recomputes must show a disagree mark (negative control for "zero disagree").
+// Generic hook: a track's checks module may export `tamper(packet)` (mutate the parsed packet in place) and a `config`
+// object { minAgree, keyboardView, tamperView }. Without `tamper`, the first row of the first panel entry that has rows is
+// flipped (booleans negated, numbers incremented, strings suffixed), which covers A1 (panels.truth_tables) unchanged.
+const cfg = { minAgree: 50, minCaptions: 5, minHeaders: 20, keyboardView: 'wumpus', tamperView: 'truth-table', ...(trackChecks.config || {}) };
+function defaultTamper(p) {
+  for (const val of Object.values(p.panels || {})) {
+    const row = Array.isArray(val) && val[0] && Array.isArray(val[0].rows) ? val[0].rows[0] : null;
+    if (!row) continue;
+    const key = 'value' in row ? 'value' : Object.keys(row)[0];
+    const v = row[key];
+    row[key] = typeof v === 'boolean' ? !v : typeof v === 'number' ? v + 1 : `${v}!`;
+    return;
+  }
+  throw new Error('no tamperable row found: export tamper(packet) from the track checks');
+}
 async function tamperedPacket() {
   const p = JSON.parse(await readFile(path.join(root, packetRel), 'utf8'));
-  const first = p.panels.truth_tables[0].rows[0];
-  first.value = !first.value;
+  (trackChecks.tamper || defaultTamper)(p);
   return JSON.stringify(p);
 }
 const server = http.createServer(async (req, res) => {
@@ -79,10 +93,10 @@ try {
   const reachedAll = ids.every((id) => visited.includes(id));
   assert('keyboard: Tab reaches the skip link, all view buttons and the download link',
     reachedAll && visited.includes('download') && (await page.locator('a.skip').count()) === 1, visited.join(' > '));
-  await page.focus('#btn-wumpus');
+  await page.focus(`#btn-${cfg.keyboardView}`);
   await page.keyboard.press('Enter');
   assert('keyboard: Enter on a focused view button opens that view',
-    await page.locator('#view-wumpus').isVisible() && !(await page.locator('#view-summary').isVisible()), '');
+    await page.locator(`#view-${cfg.keyboardView}`).isVisible() && !(await page.locator('#view-summary').isVisible()), '');
   await page.focus('#btn-summary');
   await page.keyboard.press('Space');
   assert('keyboard: Space on a focused view button opens that view', await page.locator('#view-summary').isVisible(), '');
@@ -101,10 +115,10 @@ try {
   const agree = await page.locator('[data-agree="true"]').count();
   const disagree = await page.locator('[data-agree="false"]').count();
   assert('cross-check: zero disagree marks', disagree === 0, `disagree=${disagree}`);
-  assert('cross-check: marks are actually present (not vacuous)', agree >= 50, `agree=${agree}`);
+  assert('cross-check: marks are actually present (not vacuous)', agree >= cfg.minAgree, `agree=${agree}`);
   assert('download link is a data: URL of the packet', ((await page.getAttribute('#download', 'href')) || '').startsWith('data:application/json'), '');
   assert('page has tables with captions and header cells',
-    (await page.locator('table caption').count()) > 5 && (await page.locator('table th[scope="col"]').count()) > 20, '');
+    (await page.locator("table caption").count()) > cfg.minCaptions && (await page.locator('table th[scope="col"]').count()) > cfg.minHeaders, '');
 
   // ---- track-specific assertions + screenshots
   await trackChecks.run({ page, assert, shot, openView });
@@ -116,7 +130,7 @@ try {
   await open(TAMPER);
   const tampered = await page.locator('[data-agree="false"]').count();
   assert('negative control: tampered packet is flagged with disagree marks', tampered > 0, `disagree=${tampered}`);
-  await openView('truth-table');
+  await openView(cfg.tamperView);
   await shot(`${track.toLowerCase()}-tamper-control.png`);
   await context.close();
 } catch (e) {
