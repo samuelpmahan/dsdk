@@ -44,3 +44,5 @@
 {"ts": 1791508218, "task": "T31", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 29, "tests_passed": 82, "tests_total": 82, "round": 13, "note": "F: conditioning; Wumpus oracle reproduced exactly"}
 {"ts": 1791508237, "task": "T37", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 57, "tests_passed": 38, "tests_total": 38, "round": 13, "note": "F: next-track model with smoothing"}
 {"ts": 1791508293, "task": "T32", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 90, "tests_passed": 44, "tests_total": 44, "round": 14, "note": "F: Bayes-net builder on graph DAGs"}
+{"ts": 1791508424, "task": "T36", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 160, "tests_passed": 32, "tests_total": 32, "round": 14, "note": "F: belief updates as ticks"}
+{"ts": 1791508424, "task": "T38", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 164, "tests_passed": 26, "tests_total": 26, "round": 14, "note": "F: next-track sampling; hung 2 min on a stray stdin cat, killed its own process"}

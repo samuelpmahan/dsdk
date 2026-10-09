@@ -58,18 +58,27 @@ def start_series(store: PxC, name: str, belief: Belief) -> Part:
     """Bind ``Part(belief)`` at ``px.<name>.belief.0`` with ``store.set`` and return it. ``TypeError`` for a non-PxC store,
     non-str name or non-Belief; ``ValueError`` if ``name`` does not fullmatch ``[A-Za-z_][A-Za-z0-9_]*``;
     ``AddressOccupiedError`` if the series already exists (a series cannot be restarted: write-once)."""
-    raise NotImplementedError
+    _check_series(store, name)
+    if not isinstance(belief, Belief):
+        raise TypeError(f"belief must be a Belief, not {type(belief).__name__}")
+    part = Part(belief)
+    store.set(f"px.{name}.belief.0", part)
+    return part
 
 
 def belief_history(store: PxC, name: str) -> tuple[Part, ...]:
     """The belief Parts ``px.<name>.belief.0``, ``.1``, ... that are bound, in order, up to the first index that is not bound.
     ``MissingPartError`` if ``px.<name>.belief.0`` is not bound. Type/name checks as in :func:`start_series`."""
-    raise NotImplementedError
+    _check_series(store, name)
+    parts = [store.get(f"px.{name}.belief.0")]
+    while store.has(f"px.{name}.belief.{len(parts)}"):
+        parts.append(store.get(f"px.{name}.belief.{len(parts)}"))
+    return tuple(parts)
 
 
 def current_belief(store: PxC, name: str) -> Part:
     """The newest belief Part of the series (the last of :func:`belief_history`)."""
-    raise NotImplementedError
+    return belief_history(store, name)[-1]
 
 
 def observe(store: PxC, name: str, evidence: Formula) -> Judgment:
@@ -88,4 +97,20 @@ def observe(store: PxC, name: str, evidence: Formula) -> Judgment:
     bound and the exception propagates unchanged (``dsdk.core`` semantics; do not re-implement them).
     Receipts of a successful update: 2 PRODUCED receipts, both with ``tick == "<name>.observe.<k>"``.
     """
-    raise NotImplementedError
+    _check_series(store, name)
+    if not isinstance(evidence, Formula):
+        raise TypeError(f"evidence must be a Formula, not {type(evidence).__name__}")
+    history = belief_history(store, name)
+    prev = history[-1]
+    k = len(history)
+    b = prev.value
+    missing = set(variables(evidence)) - set(b.variables)
+    if missing:
+        return Judgment(Status.UNKNOWN, None, "unmodelled variables: " + ", ".join(sorted(missing)))
+    p = probability(b, evidence)
+    if p.status is not Status.KNOWN or p.value == 0:
+        return Judgment(Status.INVALID, None, "impossible evidence: " + (p.reason or "probability is zero"))
+    with store.tick(f"{name}.observe.{k}") as tx:
+        ev_part = tx.compose(f"px.{name}.evidence.{k}", _RECORD_EVIDENCE, {"formula": Part(evidence)})
+        new_part = tx.compose(f"px.{name}.belief.{k}", _CONDITION, {"prev": prev, "evidence": ev_part})
+    return Judgment(Status.KNOWN, new_part, "")

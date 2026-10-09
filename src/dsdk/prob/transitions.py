@@ -179,7 +179,12 @@ def sample_next_tracks(model: NextTrackModel, track: str, n: int, seed: int) -> 
     """``n`` successor tracks drawn from ``P(. | track)`` with :func:`dsdk.prob.sampling.inverse_cdf_draws` over the canonical
     vocabulary order. ``KNOWN`` with a tuple of ``str`` (length ``n``); NOT_OBSERVED/UNKNOWN exactly as
     :func:`next_track_distribution`. Argument checks (``n`` int >= 0, ``seed`` int) raise as in ``inverse_cdf_draws``."""
-    raise NotImplementedError
+    d = next_track_distribution(model, track)
+    if d.status is not Status.KNOWN:
+        inverse_cdf_draws([Fraction(1)], n, seed)  # validates n and seed even when there is no distribution
+        return d
+    picks = inverse_cdf_draws([p for _, p in d.value], n, seed)
+    return Judgment(Status.KNOWN, tuple(model.tracks[i] for i in picks), "")
 
 
 def compare_next_track(model: NextTrackModel, track: str, target: str, n: int, seed: int) -> Judgment:
@@ -187,7 +192,17 @@ def compare_next_track(model: NextTrackModel, track: str, target: str, n: int, s
     ``KNOWN`` with a :class:`dsdk.prob.sampling.Comparison` (``successes`` = draws equal to ``target``, ``trials = drawn = n``).
     NOT_OBSERVED if ``track`` OR ``target`` is outside the vocabulary; UNKNOWN as in ``next_track_distribution``; UNKNOWN also if
     ``n == 0`` (no trials, so no estimate)."""
-    raise NotImplementedError
+    d = next_track_distribution(model, track)
+    if d.status is not Status.KNOWN:
+        return d
+    if target not in model.tracks:
+        return Judgment(Status.NOT_OBSERVED, None, f"target {target!r} is not in the model's vocabulary")
+    exact = dict(d.value)[target]
+    draws = sample_next_tracks(model, track, n, seed).value  # also validates n and seed
+    if n == 0:
+        return Judgment(Status.UNKNOWN, None, "no draws (n == 0), so there is no estimate")
+    hits = sum(1 for t in draws if t == target)
+    return Judgment(Status.KNOWN, make_comparison(exact, make_estimate(hits, n, n)), "")
 
 
 def held_out_log_loss(model: NextTrackModel, pairs: Iterable[tuple[str, str]]) -> Judgment:
@@ -200,4 +215,34 @@ def held_out_log_loss(model: NextTrackModel, pairs: Iterable[tuple[str, str]]) -
     * otherwise ``KNOWN`` float ``-sum(log(float(P(y|x)))) / len(pairs)``.
     Elements must be 2-tuples of ``str`` (``TypeError``).
     """
-    raise NotImplementedError
+    if not isinstance(model, NextTrackModel):
+        raise TypeError(f"model must be a NextTrackModel, not {type(model).__name__}")
+    items = list(pairs)
+    for p in items:
+        if not (isinstance(p, tuple) and len(p) == 2 and all(isinstance(t, str) for t in p)):
+            raise TypeError(f"each pair must be a 2-tuple of str, not {p!r}")
+    if not items:
+        return Judgment(Status.UNKNOWN, None, "no pairs")
+    for x, y in items:
+        for t in (x, y):
+            if t not in model.tracks:
+                return Judgment(Status.NOT_OBSERVED, None, f"track {t!r} is not in the model's vocabulary")
+    total = 0.0
+    impossible = []
+    for x, y in items:
+        d = next_track_distribution(model, x)
+        if d.status is not Status.KNOWN:
+            impossible.append((x, y))
+            continue
+        p = dict(d.value)[y]
+        if p == 0:
+            impossible.append((x, y))
+            continue
+        total += -math.log(float(p))
+    if impossible:
+        x, y = impossible[0]
+        return Judgment(
+            Status.INVALID, None,
+            f"the model assigned probability zero (or no distribution) to {x!r} -> {y!r}, so the loss is infinite",
+        )
+    return Judgment(Status.KNOWN, total / len(items), "")
