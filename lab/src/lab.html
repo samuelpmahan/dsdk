@@ -459,10 +459,10 @@ function renderEvidence(){
 const TRACK_NAMES = {'dsdk.core':'Kernel','dsdk.logic':'Logic','dsdk.lang':'Language','dsdk.graph':'Graphs','dsdk.prob':'Probability','dsdk.worlds':'Worlds'};
 const PROOF_NOTES = {
   'dsdk.logic':'Written proofs: the sum formula and "mirroring a tree twice gives it back" were each audited twice by an agent that did not write them. Both are sound; the gaps the first audit found were closed and re-checked by tracing the real code over 988 loop states.',
-  'dsdk.lang':'Written proofs (type preservation, termination of evaluation) are being audited now by the other manager.',
-  'dsdk.graph':'Written proofs (BFS finds shortest paths, topological sort terminates) are being audited now by the other manager.',
+  'dsdk.lang':'Written proofs were audited by the other manager across all 278,028 programs of size 6 or less, with no counterexample. Termination is sound. Type preservation is proved only for the if and + rules; let, and, or are asserted, not yet proved.',
+  'dsdk.graph':'Written proofs were audited by the other manager by tracing the real code through about 185,000 loop states: BFS and topological sort are sound with small gaps. Reachability answers now carry proofs checked by the logic package.',
   'dsdk.core':'No written proofs; the kernel is specified by its tests.',
-  'dsdk.prob':'Six written proofs (Bayes rule composes, impossible evidence is exactly the flagged case, the Wumpus closed form 1/(2-p), sampling is unbiased) await audit by the other manager. Before any code existed, the tests caught 49 of 52 bugs planted in a reference version.',
+  'dsdk.prob':'Six written proofs were audited by the other manager, with 46 checks run against the real code: conditioning, the Wumpus numbers, the sampling estimator and barren-node removal are sound. Two need tightening. Impossible evidence is flagged only for variables the belief models. The sampler can never draw an outcome whose weight is below about one part in 10^16 of the total. The 95% interval really covers 90–93% of the time on small samples, which the proof admits by claiming coverage only for large samples.',
   'dsdk.worlds':'No written proofs; the loaders are specified by hand-checked slices of the real data.'};
 let benchTrack = 'dsdk.lang';
 function link(href, text){ const a=el('a',{href,target:'_blank',rel:'noopener'}); a.textContent=text; return a; }

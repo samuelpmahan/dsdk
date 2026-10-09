@@ -16,13 +16,13 @@ drops zero-weight worlds; the checker then reports counterexamples, so the harne
 
 | Proof | Verdict |
 |---|---|
-| 1. `probability` is the conditional probability; `condition` composes (P9-26) | SOUND |
-| 2. impossible evidence is exactly INVALID (P28-44) | SOUND WITH ONE OVERSTATED "iff" |
-| 3. the Wumpus numbers and `1/(2-p)` (P46-66) | SOUND (every number re-derived; the KB factor claim confirmed on the real fixture) |
-| 4. inverse-CDF draws have the right law (P68-80) | SOUND WITH GAPS (assumes a continuous uniform; the bound still holds) |
-| 5. the Monte Carlo estimator and the interval (P82-103) | SOUND, with a claim worth stating more strongly (finite-n coverage) |
-| 6. barren-node elimination (P105-118) | SOUND |
-| 7. deliberately wrong: "additive smoothing is unbiased" (P122-end) | SOUND AS A FLAWED-PROOF EXHIBIT (flaw correctly named, diagnosis formula exact) |
+| 1. `probability` is the conditional probability; `condition` composes (P13-29) | SOUND |
+| 2. impossible evidence is exactly INVALID (P30-46) | SOUND WITH ONE OVERSTATED "iff" |
+| 3. the Wumpus numbers and `1/(2-p)` (P47-66) | SOUND (every number re-derived; the KB factor claim confirmed on the real fixture) |
+| 4. inverse-CDF draws have the right law (P67-79) | SOUND WITH GAPS (assumes a continuous uniform; the bound still holds) |
+| 5. the Monte Carlo estimator and the interval (P80-97) | SOUND, with a claim worth stating more strongly (finite-n coverage) |
+| 6. barren-node elimination (P98-113) | SOUND |
+| 7. deliberately wrong: "additive smoothing is unbiased" (P114-133) | SOUND AS A FLAWED-PROOF EXHIBIT (flaw correctly named, diagnosis formula exact) |
 
 ## Findings
 
@@ -31,7 +31,7 @@ drops zero-weight worlds; the checker then reports counterexamples, so the harne
    belief does not have is UNKNOWN, not INVALID (check "P2 SCOPE"). The proof is right under its own convention (every formula
    uses modelled variables); the statement should say so. Everything else in Proof 2 holds: 60 zero-mass cases, 59 of them
    vacuously entailed by `logic.entails`, all INVALID with a non-blank reason and never KNOWN.
-2. **Proof 4 treats `u` as continuous on [0,1) (P70, P79); Python's `random()` is uniform on the grid k/2^53.** I recomputed
+2. **Proof 4 treats `u` as continuous on [0,1) (P67-79); Python's `random()` is uniform on the grid k/2^53.** I recomputed
    the exact law of the real algorithm, P(index <= i) = ceil(cum_i * 2^53) / 2^53, for 3,000 random weight vectors: the worst
    per-boundary deviation from the ideal law is 0.998 x 2^-53, so the proof's headline bound (2^-53 per boundary) holds. The
    argument is incomplete rather than wrong: the grid adds up to 2^-53 and the float rounding up to 2^-54, and the total stays
@@ -55,8 +55,7 @@ drops zero-weight worlds; the checker then reports counterexamples, so the harne
    (CPT entries include 0 and 1) and each sub-network joint sums to 1. For the smoothing proof the diagnosis formula
    E[P_hat] - q = alpha(1 - |V|q)/(n + alpha|V|) is exact for n in {1,3,8}, q in {1/10,1/5,1/2,9/10}, alpha in {0,1/2,1,3}, computed with
    the real model; the false proof's conclusion fails (q = 1/10, |V| = 5, alpha = 1); alpha = 0 with nothing observed gives UNKNOWN as stated.
-8. **Test references.** I did not re-verify that every test name quoted in PROOFS.md exists; Proof 1 and Proof 7 names are quoted
-   in P24-26 and P137-138.
+8. **Test references resolve.** All five test names quoted in PROOFS.md (conditioning identities, the brute-force oracle, ancestral marginals, and the two smoothing tests) exist in `tests/prob`.
 
 ## Not checked
 
