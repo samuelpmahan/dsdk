@@ -358,7 +358,99 @@ def parse_calc(text: str) -> Expr:
     * Nesting depth 200 of ``(``, of ``not``, of ``let ... in`` bodies and of left chains ``1 + 1 + ... + 1`` must not raise
       ``RecursionError`` (loop for left-associative chains; at most 3 Python frames per nesting level otherwise).
     """
-    raise NotImplementedError
+    tokens = tokenize(text, CALC_KEYWORDS)
+    pos = 0
+    # token kind -> (precedence, operator string); all left-associative (see ``expr``).
+    binops = {
+        "OR": (1, "or"), "AND": (2, "and"), "LT": (4, "<"), "EQEQ": (4, "=="),
+        "PLUS": (5, "+"), "MINUS": (5, "-"), "STAR": (6, "*"),
+    }
+
+    def peek_kind():
+        return tokens[pos].kind if pos < len(tokens) else None
+
+    def take():
+        nonlocal pos
+        tok = tokens[pos]
+        pos += 1
+        return tok
+
+    def fail(expected):
+        if pos < len(tokens):
+            tok = tokens[pos]
+            return ParseError(f"unexpected {tok.text!r}", tok.start, expected)
+        return ParseError("unexpected end of input", len(text), expected)
+
+    def eat(kind):
+        if peek_kind() != kind:
+            raise fail({kind})
+        return take()
+
+    def prefix(min_prec):
+        # The start of an operand. let/if/not are only legal where the grammar allows them (see module docstring).
+        kind = peek_kind()
+        if kind == "LET" and min_prec == 0:
+            take()
+            name = eat("NAME").text
+            eat("EQ")
+            bound = expr(0)
+            eat("IN")
+            return Let(name, bound, expr(0))
+        if kind == "IF" and min_prec == 0:
+            take()
+            cond = expr(0)
+            eat("THEN")
+            then = expr(0)
+            eat("ELSE")
+            return If(cond, then, expr(0))
+        if kind == "NOT" and min_prec <= 3:
+            take()
+            return Not(expr(3))
+        if kind == "INT":
+            return IntLit(int(take().text))
+        if kind == "MINUS":
+            take()
+            if peek_kind() != "INT":
+                raise fail({"INT"})
+            return IntLit(-int(take().text))
+        if kind == "TRUE":
+            take()
+            return BoolLit(True)
+        if kind == "FALSE":
+            take()
+            return BoolLit(False)
+        if kind == "NAME":
+            return Var(take().text)
+        if kind == "LPAREN":
+            take()
+            inner = expr(0)
+            eat("RPAREN")
+            return inner
+        expected = {"INT", "MINUS", "TRUE", "FALSE", "NAME", "LPAREN"}
+        if min_prec <= 3:
+            expected.add("NOT")
+        if min_prec == 0:
+            expected.update(("LET", "IF"))
+        raise fail(expected)
+
+    def expr(min_prec):
+        # Precedence climbing. ``chained`` is true when the left operand is a comparison, or a ``not`` whose operand
+        # stopped at a comparison; a further comparison operator then ends this loop (comparisons do not chain).
+        chained = peek_kind() == "NOT"
+        left = prefix(min_prec)
+        while True:
+            op = binops.get(peek_kind())
+            if op is None or op[0] < min_prec or (op[0] == 4 and chained):
+                return left
+            take()
+            prec, name = op
+            left = BinOp(name, left, expr(prec + 1))
+            chained = prec == 4
+
+    result = expr(0)
+    if pos < len(tokens):
+        raise fail({"END"})
+    return result
 
 
 # ----------------------------------------------------------------------------- typing
