@@ -26,3 +26,4 @@
 {"ts": 1791506516, "task": "T23", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 169, "tests_passed": 21, "tests_total": 21, "round": 7, "note": ""}
 {"ts": 1791506516, "task": "T25", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 85, "tests_passed": 20, "tests_total": 20, "round": 7, "note": ""}
 {"ts": 1791506516, "task": "contracts-A2", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 1935, "tests_passed": null, "tests_total": null, "round": null, "note": "1338 tests; 43/46 mutants caught, 3 equivalent"}
+{"ts": 1791506904, "task": "T09", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 35, "tests_passed": 123, "tests_total": 123, "round": 8, "note": "F: lexer DFA"}

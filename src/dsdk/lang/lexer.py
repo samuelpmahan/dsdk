@@ -83,13 +83,49 @@ class DFA:
 def char_class(ch: str) -> str:
     """Class name of ONE character per the table in the module docstring (ASCII only; anything else is ``"other"``).
     ``ch`` must be a ``str`` of length 1 (else ``ValueError``; a non-str is ``TypeError``)."""
-    raise NotImplementedError
+    if not isinstance(ch, str):
+        raise TypeError(f"char_class expects a str, not {type(ch).__name__}")
+    if len(ch) != 1:
+        raise ValueError(f"char_class expects exactly one character, got {len(ch)}")
+    if ch in _ALPHA:
+        return "alpha"
+    if ch in _DIGITS:
+        return "digit"
+    if ch in _SPACE:
+        return "space"
+    if ch in _SYMBOLS:
+        return ch
+    return "other"
+
+
+_ALPHA = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
+_DIGITS = "0123456789"
+_SPACE = " \t\n\r"
+_SYMBOLS = "()~&|+*-<>="
 
 
 def default_dfa() -> DFA:
     """The DFA of the module docstring as a :class:`DFA` (fresh dicts or read-only mappings; callers must not be able
     to corrupt later calls by mutating the result)."""
-    raise NotImplementedError
+    transitions = {
+        ("start", "alpha"): "name", ("start", "digit"): "int", ("start", "space"): "ws",
+        ("start", "("): "lparen", ("start", ")"): "rparen", ("start", "~"): "tilde", ("start", "&"): "amp",
+        ("start", "|"): "bar", ("start", "+"): "plus", ("start", "*"): "star", ("start", "-"): "minus",
+        ("start", "<"): "lt", ("start", "="): "eq",
+        ("name", "alpha"): "name", ("name", "digit"): "name",
+        ("int", "digit"): "int",
+        ("ws", "space"): "ws",
+        ("minus", ">"): "arrow",
+        ("lt", "-"): "lt_minus",
+        ("lt_minus", ">"): "iff",
+        ("eq", "="): "eqeq",
+    }
+    accepting = {
+        "name": "NAME", "int": "INT", "ws": "WS", "lparen": "LPAREN", "rparen": "RPAREN", "tilde": "TILDE", "amp": "AMP",
+        "bar": "BAR", "plus": "PLUS", "star": "STAR", "minus": "MINUS", "arrow": "ARROW", "lt": "LT", "iff": "IFF",
+        "eq": "EQ", "eqeq": "EQEQ",
+    }
+    return DFA(start="start", transitions=transitions, accepting=accepting)
 
 
 def tokenize(
@@ -110,4 +146,33 @@ def tokenize(
     * Illegal character -> ``LexError`` whose ``offset`` is its index (the FIRST illegal character; nothing is returned).
     * Must be iterative and linear-time in ``len(text)`` apart from the bounded backtrack (at most 1 character).
     """
-    raise NotImplementedError
+    if not isinstance(text, str):
+        raise TypeError(f"tokenize expects a str, not {type(text).__name__}")
+    machine = dfa if dfa is not None else default_dfa()
+    transitions = machine.transitions
+    accepting = machine.accepting
+    n = len(text)
+    tokens: list[Token] = []
+    i = 0
+    while i < n:
+        state = machine.start
+        j = i
+        last = None
+        while j < n:
+            nxt = transitions.get((state, char_class(text[j])))
+            if nxt is None:
+                break
+            state = nxt
+            j += 1
+            if state in accepting:
+                last = (j, accepting[state])
+        if last is None:
+            raise LexError(f"illegal character {text[i]!r}", i)
+        end, kind = last
+        body = text[i:end]
+        if kind == "NAME" and body in keywords:
+            kind = body.upper()
+        if keep_whitespace or kind != "WS":
+            tokens.append(Token(kind, body, i, end))
+        i = end
+    return tokens
