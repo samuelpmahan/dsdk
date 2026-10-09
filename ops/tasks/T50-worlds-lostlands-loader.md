@@ -4,6 +4,8 @@
 
 **Files to edit.** `src/dsdk/worlds/lostlands.py` only. Do NOT edit any file under `tests/`, `fixtures/`, `tracks.toml`, `tracks/`, `ops/`, or functions owned by other tasks. Read the module docstring (file format) and every stub docstring first: they are the spec, including exact error-message prefixes, check order and tie-breaks. Read `tests/worlds/test_worlds_lostlands.py` and `tests/worlds/toy_world.py` before coding.
 
+**Start from verified code.** Run `git show 9440918:src/dsdk/worlds/lostlands.py` and start from that previously verified implementation (it passed the old 80 tests). Keep it, and add ONLY the changes in this card: the unique string `Track.key` check, the `Track.artist` string, `track_key`, `track_index`, and the unique selector-label check. `describe_provenance` and `record_provenance` stay with the provenance card (they are still stubs in that commit; leave them as stubs).
+
 **Done when.** `cd /home/user/dsdk && .venv/bin/python -m pytest tests/worlds/test_worlds_lostlands.py -q -k "not provenance"` passes (exit 0). Also `cd /home/user/dsdk && .venv/bin/python -m pytest tests/core tests/logic tests/graph tests/test_reuse.py -q` must stay green.
 
 **Depends on.** none (dsdk.core and dsdk.graph already exist)
