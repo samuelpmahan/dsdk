@@ -301,17 +301,34 @@ def forward_sample(net: BayesNet, n: int, seed: int) -> tuple[tuple[tuple[str, b
 
 
 EXACT_BISECTION_STEPS = 60
-"""Number of halvings of [0, 1] used by :func:`exact_interval` (bracket width ``2**-60``, below one double near 0.5)."""
+"""Number of float halvings of [0, 1] used by :func:`exact_interval` for each end (bracket width ``2**-60``)."""
+
+_WIDEN = 1e-13
+"""Absolute outward widening applied to each float end of :func:`exact_interval` (see its Method paragraph and tracks/A3/PROOFS.md, Proof 9)."""
 
 
-def _binom_tail_ge(n: int, k: int, p: Fraction) -> Fraction:
-    """Exact ``P(X >= k)`` for ``X ~ Binomial(n, p)`` with rational ``p`` (``Fraction`` arithmetic, no rounding)."""
-    return sum((math.comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(k, n + 1)), Fraction(0))
+def _log_choose_table(n: int) -> list[float]:
+    """``[log C(n, i) for i in 0..n]`` as floats, via ``math.lgamma`` (computed once per :func:`exact_interval` call)."""
+    top = math.lgamma(n + 1)
+    return [top - math.lgamma(i + 1) - math.lgamma(n - i + 1) for i in range(n + 1)]
 
 
-def _binom_tail_le(n: int, k: int, p: Fraction) -> Fraction:
-    """Exact ``P(X <= k)`` for ``X ~ Binomial(n, p)`` with rational ``p``."""
-    return sum((math.comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(0, k + 1)), Fraction(0))
+def _binom_tail_ge(n: int, k: int, p: float, logc: Sequence[float]) -> float:
+    """Float ``P(X >= k)`` for ``X ~ Binomial(n, p)``, ``0 < p < 1``, summed DIRECTLY (no complement) with ``math.fsum``.
+
+    Each term is ``exp(logc[i] + i*log(p) + (n-i)*log1p(-p))``, so nothing underflows or overflows at large ``n``.
+    ``logc`` is the table from :func:`_log_choose_table`.
+    """
+    lp = math.log(p)
+    lq = math.log1p(-p)
+    return math.fsum(math.exp(logc[i] + i * lp + (n - i) * lq) for i in range(k, n + 1))
+
+
+def _binom_tail_le(n: int, k: int, p: float, logc: Sequence[float]) -> float:
+    """Float ``P(X <= k)`` for ``X ~ Binomial(n, p)``, ``0 < p < 1``, summed DIRECTLY with ``math.fsum`` (see :func:`_binom_tail_ge`)."""
+    lp = math.log(p)
+    lq = math.log1p(-p)
+    return math.fsum(math.exp(logc[i] + i * lp + (n - i) * lq) for i in range(0, k + 1))
 
 
 def exact_interval(successes: int, trials: int, confidence: object = 0.95) -> tuple[float, float]:
@@ -322,21 +339,83 @@ def exact_interval(successes: int, trials: int, confidence: object = 0.95) -> tu
     For EVERY true proportion ``p`` and EVERY ``n`` the probability that ``[L(X), U(X)]`` contains ``p`` is at least ``confidence``
     (unlike :func:`wilson_interval`, whose true coverage for rare events is only about 84 % at the 95 % label; see tracks/A3/PROOFS.md).
 
-    Method (exact rational arithmetic, no floating point inside the search). ``confidence`` is converted with ``dsdk.prob.exact.to_prob`` (so
-    ``0.95`` is exactly ``19/20``). The two binomial tails are evaluated EXACTLY as ``Fraction`` at rational ``p`` (``math.comb`` and ``Fraction``
-    powers). Each end is found by :data:`EXACT_BISECTION_STEPS` (60) halvings of ``[0, 1]`` with ``Fraction`` midpoints, keeping the bracket
-    ``[lo, hi]`` with ``tail(lo) < a/2 <= tail(hi)`` for the lower end (tail increasing in ``p``) and the mirror for the upper end. The
-    returned lower end is the bracket's LEFT end and the returned upper end is its RIGHT end, so the result is never narrower than the true
-    interval: coverage can only increase. The two ``Fraction`` ends are then converted to ``float`` and, if the conversion moved an end inward,
-    pushed one step outward with ``math.nextafter`` (toward 0 for the lower end, toward 1 for the upper end; the upper end is capped at 1.0). So
-    ``Fraction(low) <= L`` and ``Fraction(high) >= U`` hold exactly, and each end is within about ``2**-60 + 1 ulp`` of the true value.
-    ``k = 0`` returns ``low == 0.0`` and ``k = n`` returns ``high == 1.0`` exactly.
+    Method (float bisection in log space; see tracks/A3/PROOFS.md, Proof 9). ``confidence`` is converted with ``dsdk.prob.exact.to_prob`` (so
+    ``0.95`` is exactly ``19/20``) and ``a/2`` is converted once to a float. The log-factorial table ``log C(n, i)`` is built once with
+    ``math.lgamma``. Each binomial tail is a direct sum of ``math.fsum`` over terms ``exp(log C(n, i) + i*log(p) + (n-i)*log1p(-p))``
+    (the tail is never computed as one minus the other side, which loses all precision when the tail is tiny). Each end is found by
+    :data:`EXACT_BISECTION_STEPS` (60) float halvings of ``[0, 1]``, keeping the bracket with the tail equation on the correct side: for the
+    lower end ``tail_ge(k, mid) >= a/2`` moves ``hi`` down and otherwise ``lo`` up, and for the upper end ``tail_le(k, mid) > a/2`` moves ``lo``
+    up and otherwise ``hi`` down. The lower end is the bracket's LEFT end and the upper end its RIGHT end (never the midpoint).
+    Each float end is then widened outward by the absolute amount :data:`_WIDEN` (``1e-13``), clamped to ``[0, 1]``: the float tails are
+    accurate to about ``1e-12`` relative, so the widening keeps the returned ends on the outer side of the exact solutions, so the interval is
+    never narrower than the exact one, and the agreement with the exact ends is within about ``1e-12``.
+    ``k = 0`` returns ``low == 0.0`` and ``k = n`` returns ``high == 1.0`` exactly, with no search.
 
-    Cost: about ``2 * 60`` tail evaluations of ``n + 1`` terms each with big rationals; fine for ``trials`` up to a few hundred.
+    Cost: about ``2 * 60`` tail evaluations of ``n + 1`` terms each, in floats: about 3 ms at ``trials = 300``. The guarantee and the
+    agreement with the exact rational version are proved for ``trials`` up to 2000 (the lgamma error grows with ``n``).
 
     Arguments: ``trials`` an int >= 1, ``successes`` an int with ``0 <= successes <= trials`` (bool and floats are a ``TypeError``, range
     errors a ``ValueError``, checked in the order trials, successes, then ``successes > trials``); ``confidence`` an int/Fraction/float
     strictly between 0 and 1 (``to_prob`` rules for type and finiteness; exactly 0 or 1 is a ``ValueError``).
+    """
+    _check_int(trials, "trials", 1)
+    _check_int(successes, "successes", 0)
+    if successes > trials:
+        raise ValueError(f"successes ({successes}) must not exceed trials ({trials})")
+    level = to_prob(confidence, "confidence")
+    if level == 0 or level == 1:
+        raise ValueError(f"confidence must be strictly between 0 and 1, got {level}")
+    half = float((1 - level) / 2)
+    n, k = trials, successes
+    logc = _log_choose_table(n)
+
+    if k > 0:
+        lo, hi = 0.0, 1.0
+        for _ in range(EXACT_BISECTION_STEPS):
+            mid = (lo + hi) / 2
+            if _binom_tail_ge(n, k, mid, logc) >= half:
+                hi = mid
+            else:
+                lo = mid
+        low = max(0.0, lo - _WIDEN)
+    else:
+        low = 0.0
+
+    if k < n:
+        lo, hi = 0.0, 1.0
+        for _ in range(EXACT_BISECTION_STEPS):
+            mid = (lo + hi) / 2
+            if _binom_tail_le(n, k, mid, logc) > half:
+                lo = mid
+            else:
+                hi = mid
+        high = min(1.0, hi + _WIDEN)
+    else:
+        high = 1.0
+
+    return (float(low), float(high))
+
+
+_REFERENCE_BISECTION_STEPS = 60
+
+
+def _reference_tail_ge(n: int, k: int, p: Fraction) -> Fraction:
+    """Exact ``P(X >= k)`` for ``X ~ Binomial(n, p)`` with rational ``p`` (``Fraction`` arithmetic, no rounding). Reference only."""
+    return sum((math.comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(k, n + 1)), Fraction(0))
+
+
+def _reference_tail_le(n: int, k: int, p: Fraction) -> Fraction:
+    """Exact ``P(X <= k)`` for ``X ~ Binomial(n, p)`` with rational ``p``. Reference only."""
+    return sum((math.comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(0, k + 1)), Fraction(0))
+
+
+def _exact_interval_reference(successes: int, trials: int, confidence: object = 0.95) -> tuple[float, float]:
+    """The slow exact-Fraction version of :func:`exact_interval` (the previous implementation, kept unchanged as a private reference).
+
+    It is NOT used by the library: it takes minutes at ``trials`` = 1000 and is only used to regenerate and check the frozen fixture.
+    Exact ``Fraction`` bisection of ``[0, 1]`` with :data:`_REFERENCE_BISECTION_STEPS` (60) halvings per end; the lower end is the left
+    end of its bracket, the upper end the right end, each converted to ``float`` and pushed one ``math.nextafter`` step outward if the
+    conversion moved it inward.
     """
     _check_int(trials, "trials", 1)
     _check_int(successes, "successes", 0)
@@ -350,9 +429,9 @@ def exact_interval(successes: int, trials: int, confidence: object = 0.95) -> tu
 
     if k > 0:
         lo, hi = Fraction(0), Fraction(1)
-        for _ in range(EXACT_BISECTION_STEPS):
+        for _ in range(_REFERENCE_BISECTION_STEPS):
             mid = (lo + hi) / 2
-            if _binom_tail_ge(n, k, mid) >= half:
+            if _reference_tail_ge(n, k, mid) >= half:
                 hi = mid
             else:
                 lo = mid
@@ -362,9 +441,9 @@ def exact_interval(successes: int, trials: int, confidence: object = 0.95) -> tu
 
     if k < n:
         lo, hi = Fraction(0), Fraction(1)
-        for _ in range(EXACT_BISECTION_STEPS):
+        for _ in range(_REFERENCE_BISECTION_STEPS):
             mid = (lo + hi) / 2
-            if _binom_tail_le(n, k, mid) > half:
+            if _reference_tail_le(n, k, mid) > half:
                 lo = mid
             else:
                 hi = mid
