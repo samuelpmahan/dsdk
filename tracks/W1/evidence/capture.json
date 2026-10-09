@@ -1,7 +1,7 @@
 {
  "track": "W1",
- "captured_at": "2026-10-09T01:11:28.156Z",
- "git_sha": "a17e08a6af148be269ec47d756cee42f6183c8a6",
+ "captured_at": "2026-10-09T01:23:13.876Z",
+ "git_sha": "e6bea14b1a9230f4b17dea8a8a856994b27026ed",
  "browser": {
   "name": "chromium",
   "version": "141.0.7390.37"

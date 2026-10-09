@@ -13,7 +13,7 @@ import random
 import statistics
 import sys
 import tempfile
-from collections import Counter, deque
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -21,7 +21,7 @@ import common  # noqa: E402
 from common import REPO  # noqa: E402
 
 from dsdk.core import Status  # noqa: E402
-from dsdk.graph import components  # noqa: E402
+from dsdk.graph import components, shortest_path  # noqa: E402
 from dsdk.worlds import (  # noqa: E402
     FIXTURE_PATH, PINNED_SHA256, SOURCE_BRANCH, SOURCE_COMMIT, SOURCE_REPO, IntegrityError, SixDegrees,
     coselection_graph, load_lostlands, record_provenance, transition_graph,
@@ -42,14 +42,16 @@ def hashed(rels):
     return [{"path": r, "sha256": common.sha256_file(REPO / r)} for r in rels]
 
 
-def hop_json(h):
-    return {"source": h.source, "target": h.target, "evidence": h.evidence.value, "count": h.count, "sets": [list(s) for s in h.sets]}
+def hop_json(h, kid):
+    return {"source": kid[h.source], "target": kid[h.target], "evidence": h.evidence.value, "count": h.count, "sets": [list(s) for s in h.sets]}
 
 
-def query_json(sd, case):
-    d = sd.query(case["source"], case["target"])
+def query_json(sd, case, kid):
+    """Python's answer (track KEYS) in the packet's id form: the browser works with track ids, the reason string keeps keys."""
+    keys = [t.key for t in sd.world.tracks]
+    d = sd.query(keys[case["source"]], keys[case["target"]])
     py = {"source": case["source"], "target": case["target"], "status": d.judgment.status.value, "reason": d.judgment.reason,
-          "path": list(d.path) if d.path else None, "hops": [hop_json(h) for h in d.hops]}
+          "path": [kid[k] for k in d.path] if d.path else None, "hops": [hop_json(h, kid) for h in d.hops]}
     ora = {"status": case["status"], "reason": case["reason"], "path": case["path"],
            "hops": [{k: h[k] for k in ("source", "target", "evidence", "count", "sets")} for h in case["hops"]]}
     py["oracle_agrees"] = {k: py[k] for k in ora} == ora
@@ -57,20 +59,8 @@ def query_json(sd, case):
 
 
 def naive_all_edges(sd, s, t):
-    """MUTANT: treat inferred edges as observed (breadth-first over every edge) and call the result KNOWN."""
-    parent, queue = {s: None}, deque([s])
-    while queue:
-        u = queue.popleft()
-        for v, _ in sd._succ[u]:
-            if v not in parent:
-                parent[v] = u
-                queue.append(v)
-    if t not in parent:
-        return None
-    out = [t]
-    while parent[out[-1]] is not None:
-        out.append(parent[out[-1]])
-    return out[::-1]
+    """MUTANT: treat inferred edges as observed (dsdk.graph.shortest_path over EVERY edge) and call the result KNOWN."""
+    return shortest_path(sd.graph, s, t)
 
 
 def main() -> int:
@@ -79,14 +69,16 @@ def main() -> int:
     slices = json.loads((REPO / SLICES).read_text())
     raw_doc = json.loads(gzip.decompress((REPO / STORE).read_bytes()))
 
-    queries = [query_json(sd, c) for c in slices["degrees"]]
+    keys = [t.key for t in world.tracks]
+    kid = {k: i for i, k in enumerate(keys)}
+    queries = [query_json(sd, c, kid) for c in slices["degrees"]]
     disagreements = [q for q in queries if not q["oracle_agrees"]]
 
     rng = random.Random(SEED)
     pairs = [[rng.randrange(len(world.tracks)), rng.randrange(len(world.tracks))] for _ in range(PAIRS)]
     results, hops_known = [], []
     for s, t in pairs:
-        d = sd.query(s, t)
+        d = sd.query(keys[s], keys[t])
         status = d.judgment.status.value
         results.append([status, len(d.path) - 1 if d.path else None])
         if status == "known":
@@ -128,12 +120,12 @@ def main() -> int:
     ]
     analytic[2]["pass"] = analytic[2]["observed"] is True
     boundary = []
-    inv = sd.query(0, 10**6)
+    inv = sd.query(keys[0], 'no such track#999')
     boundary.append({"name": "invalid_node_is_not_unknown", "description": "A track id outside the corpus is INVALID (a different answer from UNKNOWN).",
                      "expected": "invalid", "observed": inv.judgment.status.value, "pass": inv.judgment.status is Status.INVALID})
-    same = sd.query(7, 7)
+    same = sd.query(keys[7], keys[7])
     boundary.append({"name": "track_reaches_itself", "description": "The empty path is KNOWN.", "expected": ["known", [7]],
-                     "observed": [same.judgment.status.value, list(same.path)], "pass": same.judgment.status is Status.KNOWN and same.path == (7,)})
+                     "observed": [same.judgment.status.value, [kid[k] for k in same.path]], "pass": same.judgment.status is Status.KNOWN and same.path == (keys[7],)})
     openq = next(q for q in queries if q["status"] == "unknown" and q["path"] is None)
     boundary.append({"name": "no_path_is_unknown_not_known_false", "description": "Disconnected pair in an open world: UNKNOWN (never KNOWN False).",
                      "expected": "unknown", "observed": openq["status"], "pass": openq["status"] == "unknown"})
@@ -143,7 +135,7 @@ def main() -> int:
 
     # ---- deliberate failures
     naive_wrong = [q for q in queries if q["status"] == "unknown" and q["path"] is not None
-                   and (p := naive_all_edges(sd, q["source"], q["target"])) is not None and len(p) - 1 <= len(q["path"]) - 1]
+                   and (p := naive_all_edges(sd, keys[q["source"]], keys[q["target"]])) is not None and len(p) - 1 <= len(q["path"]) - 1]
     with tempfile.TemporaryDirectory() as tmp:
         bad = Path(tmp) / "tampered.gz"
         data = bytearray(FIXTURE_PATH.read_bytes())
@@ -193,8 +185,8 @@ def main() -> int:
             "files": hashed(FIXTURES)},
         "implementation": {
             "module": "dsdk.worlds", "version": "0.0.1",
-            "config": {"config_version": "w1-conventions-1", "search": "KNOWN: breadth-first over observed edges, first discoverer is the parent; otherwise Dijkstra minimising (inferred edges, hops, node-id sequence)",
-                       "graphs": "transition (directed, weight=count, KNOWN), co-selection (undirected, UNKNOWN), search = observed + both directions of every co-selection"},
+            "config": {"config_version": "w1-conventions-1", "search": "dsdk.graph.reachable for the verdict; shortest_path over observed edges, else candidate_path (fewest inferred edges, then hops, then node order)",
+                       "nodes": "track string keys (e.g. Torque#001)", "graphs": "transition (directed, weight=count, KNOWN), co-selection (undirected, UNKNOWN), search = observed + both directions of every co-selection"},
             "code_files": hashed(CODE),
             "fixtures": [{"path": SLICES, "sha256": common.sha256_file(REPO / SLICES), "representative": [f"{c['source']}->{c['target']}" for c in slices["degrees"][:8]]},
                          {"path": STORE, "sha256": common.sha256_file(REPO / STORE), "representative": ["lost-lands-2018"]}]},

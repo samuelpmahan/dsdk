@@ -118,18 +118,20 @@ function candidatePath(idx, s, t) {
   return null;
 }
 
+const keyOf = (idx, i) => idx.world.tracks[i][0]; // the track's string key: what dsdk.worlds names graph nodes
+
 /** Decision table: INVALID -> KNOWN path (BFS over observed steps) -> best path with inferred steps -> open world. */
 export function queryDegrees(idx, s, t) {
   const bad = [s, t].find((x) => !Number.isInteger(x) || x < 0 || x >= idx.n);
-  if (bad !== undefined) return { status: 'invalid', reason: `node ${bad} is not in the graph`, path: null, hops: [] };
+  if (bad !== undefined) return { status: 'invalid', reason: `node ${typeof bad === 'string' ? `'${bad}'` : bad} is not in the graph`, path: null, hops: [] };
   let path = knownPath(idx, s, t);
   if (path) {
-    return { status: 'known', reason: `known path: ${path.join(' -> ')}`, path, hops: path.slice(1).map((v, i) => hopOf(idx, path[i], v)) };
+    return { status: 'known', reason: `known path: ${path.map((i) => keyOf(idx, i)).join(' -> ')}`, path, hops: path.slice(1).map((v, i) => hopOf(idx, path[i], v)) };
   }
   path = candidatePath(idx, s, t);
   if (!path) return { status: 'unknown', reason: OPEN_WORLD, path: null, hops: [] };
   const hops = path.slice(1).map((v, i) => hopOf(idx, path[i], v));
-  const bads = hops.filter((x) => x.evidence !== 'known').map((x) => `${x.source}->${x.target} (${x.evidence})`);
+  const bads = hops.filter((x) => x.evidence !== 'known').map((x) => `${keyOf(idx, x.source)}->${keyOf(idx, x.target)} (${x.evidence})`);
   return { status: 'unknown', reason: `uncertain edges on best candidate path: ${bads.join(', ')}`, path, hops };
 }
 

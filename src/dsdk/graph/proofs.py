@@ -69,17 +69,31 @@ class Countermodel:
 
 def node_var(g: Graph, node: Hashable) -> Var:
     """The variable of ``node``: ``Var(f"n{g.index_of(node)}")``. ``dsdk.graph.MissingNodeError`` for an absent node; ``TypeError`` for a non-Graph."""
-    raise NotImplementedError
+    if not isinstance(g, Graph):
+        raise TypeError(f"expected a Graph, got {type(g).__name__}")
+    return Var(f"n{g.index_of(node)}")
 
 
 def known_premises(g: Graph) -> tuple[Formula, ...]:
     """One ``Implies(var(u), var(v))`` per KNOWN arrow, in ``g.edges`` order; an undirected KNOWN edge ``{u, v}`` contributes ``u -> v`` then
     ``v -> u`` (just one premise when ``u == v``). Edges with evidence other than ``Status.KNOWN`` contribute nothing. ``TypeError`` for a non-Graph."""
-    raise NotImplementedError
+    if not isinstance(g, Graph):
+        raise TypeError(f"expected a Graph, got {type(g).__name__}")
+    out: list[Formula] = []
+    for e in g.edges:
+        if e.evidence is not Status.KNOWN:
+            continue
+        out.append(Implies(node_var(g, e.source), node_var(g, e.target)))
+        if not g.directed and e.source != e.target:
+            out.append(Implies(node_var(g, e.target), node_var(g, e.source)))
+    return tuple(out)
 
 
 def _missing(g: Graph, source: Hashable, target: Hashable) -> Judgment | None:
-    raise NotImplementedError
+    for node in (source, target):
+        if not g.has_node(node):
+            return Judgment(Status.INVALID, None, f"node {node!r} is not in the graph")
+    return None
 
 
 def witness_proof(g: Graph, source: Hashable, target: Hashable) -> Judgment:
@@ -101,7 +115,31 @@ def witness_proof(g: Graph, source: Hashable, target: Hashable) -> Judgment:
       ``shortest_path`` of ``known_subgraph(g)``. Before returning, the function runs ``dsdk.logic.check(steps, premises)``; if that ever fails it
       returns ``INVALID`` with a reason starting ``"proof failed its own check:"`` (it cannot happen for a correct implementation).
     """
-    raise NotImplementedError
+    if not isinstance(g, Graph):
+        raise TypeError(f"expected a Graph, got {type(g).__name__}")
+    missing = _missing(g, source, target)
+    if missing is not None:
+        return missing
+    verdict = reachable(g, source, target)
+    if verdict.status is Status.UNKNOWN:
+        return verdict
+    if verdict.status is Status.KNOWN and verdict.value is False:
+        return Judgment(
+            Status.NOT_APPLICABLE, None,
+            f"no proof exists: {target!r} is not reachable from {source!r}; ask for the countermodel instead",
+        )
+    path = shortest_path(known_subgraph(g), source, target)
+    if path is None:
+        return Judgment(Status.INVALID, None, "proof failed its own check: no KNOWN path found for a KNOWN True verdict")
+    steps: list[Step] = [Step(node_var(g, path[0]), Rule.PREMISE, ())]
+    for i in range(1, len(path)):
+        steps.append(Step(Implies(node_var(g, path[i - 1]), node_var(g, path[i])), Rule.PREMISE, ()))
+        steps.append(Step(node_var(g, path[i]), Rule.MODUS_PONENS, (2 * i - 1, 2 * i - 2)))
+    premises = (node_var(g, source),) + known_premises(g)
+    result = check(steps, premises)
+    if not result.ok:
+        return Judgment(Status.INVALID, None, "proof failed its own check: " + result.reason)
+    return Judgment(Status.KNOWN, GraphProof(tuple(path), premises, tuple(steps)), "")
 
 
 def unreachability_countermodel(g: Graph, source: Hashable, target: Hashable) -> Judgment:

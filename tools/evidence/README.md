@@ -49,9 +49,11 @@ Requirements: Python via `uv run`, Node 22, global Playwright (`/opt/node22/lib/
    Assert specific numbers and verdicts from DOM text, not just "no errors". `openView(id)` uses the keyboard. Call
    `shot('a2-<view>.png')` for each view (full page).
 4. **Run** `tools/evidence/run.sh A2` (it looks for `build_a2.py`, `viewer/checks/a2.mjs`, `viewer/a2.mjs`).
-5. The tamper control in `capture.mjs` currently flips the first row of `panels.truth_tables`. For a new track make that
-   hook generic (for example `panels.<first key>`), or add a `tamper` export to `viewer/checks/<track>.mjs`. Do this before
-   relying on the negative control for A2/A5.
+5. The tamper control in `capture.mjs` is generic. By default it flips the first row of the first `panels.<name>` entry that
+   has `rows` (this is what A1 relies on). A track can instead export `tamper(packet)` from `viewer/checks/<track>.mjs` to mutate
+   the parsed packet in place (W1 bumps a hop count), and a `config` object `{ minAgree, keyboardView, tamperView, minCaptions,
+   minHeaders }` to set the thresholds and the view ids the generic checks use. The negative control passes only when the viewer
+   shows at least one disagree mark for the tampered packet.
 6. Update `ROADMAP.md` board state to "Evidence ready" only when `capture.json` has `"ok": true`.
 
 ## Conventions

@@ -1,6 +1,6 @@
 # T50-worlds-lostlands-loader
 
-**Goal.** Implement the Lost Lands loader in `src/dsdk/worlds/lostlands.py`: `LostLands.track_artists`, `LostLands.track_label`, `LostLands.date_label`, `LostLands.sets`, `sha256_bytes`, `parse_lostlands`, `load_lostlands`, `check_transitions` (plus private helpers). NOT `describe_provenance` / `record_provenance` (task T51).
+**Goal.** Implement the Lost Lands loader in `src/dsdk/worlds/lostlands.py`: `LostLands.track_artists`, `LostLands.track_key`, `LostLands.track_index`, `LostLands.track_label`, `LostLands.date_label`, `LostLands.sets`, `sha256_bytes`, `parse_lostlands`, `load_lostlands`, `check_transitions` (plus private helpers). NOT `describe_provenance` / `record_provenance` (task T51).
 
 **Files to edit.** `src/dsdk/worlds/lostlands.py` only. Do NOT edit any file under `tests/`, `fixtures/`, `tracks.toml`, `tracks/`, `ops/`, or functions owned by other tasks. Read the module docstring (file format) and every stub docstring first: they are the spec, including exact error-message prefixes, check order and tie-breaks. Read `tests/worlds/test_worlds_lostlands.py` and `tests/worlds/toy_world.py` before coding.
 
@@ -14,6 +14,7 @@
 - Row errors must name the field and row, e.g. `tracks[2]`, `selections[9]`, `meta.tracks` (tests look for those substrings).
 - IDs are list positions; dates are `-1` or an index into `dates`; decoded `-1` becomes `None`. `track_artists`/`track_label` must raise `IndexError` for negative ids (no wrap-around).
 - `load_lostlands`: hash the RAW file bytes first and raise `IntegrityError` BEFORE gunzipping. `gzip.decompress` raises `OSError`/`EOFError`; wrap them as `WorldError("gzip: ...")`; invalid JSON/UTF-8 becomes `WorldError("json: ...")`. A missing file must stay `FileNotFoundError`. Compare digests case-insensitively.
+- Every `Track` has a string `key` (unique: raise `WorldError("tracks[i]: duplicate key ...")`) and an `artist` string (primary artists joined with `" & "`); selector-group labels must also be unique. Graphs name nodes by these strings. `track_index` raises `KeyError` for an unknown key; `track_key` raises `IndexError` for out-of-range or negative ids.
 - Copy the `meta` dict (the world must not alias the input). `sets()` keys are in first-appearance order and keep repeated tracks. `check_transitions` reasons are exact strings given in its docstring.
 - The real corpus has 1,352 tracks; `pytest` runs the 217-test file in about 30 s total; the hang guard allows 60 s per test.
 
