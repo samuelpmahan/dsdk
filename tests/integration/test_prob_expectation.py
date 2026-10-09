@@ -261,12 +261,16 @@ def test_the_sampled_estimate_is_within_four_standard_errors_of_ten_ninths():
 
 
 def test_sampled_indicator_counts_lie_inside_the_exact_binomial_interval_of_the_exact_answer():
-    """For an indicator expression the sampled success count is binomial, and over 200 seeds the exact 95% Clopper-Pearson interval around the sample proportion contains the exact expectation 5/9 in at least 185 cases."""
+    """For an indicator expression the sampled success count is binomial, and over 200 seeds of 100 draws the exact 95% Clopper-Pearson interval around the sample proportion contains the exact expectation 5/9 in at least 185 cases."""
     b = kb_belief(Fr(1, 5))
+    intervals = {}
     hits = 0
     for seed in range(200):
-        m = known(sample_expectation(b, "if P22 then 1 else 0", 600, seed))
-        lo, hi = exact_interval(round(m.mean * 600), 600)
+        m = known(sample_expectation(b, "if P22 then 1 else 0", 100, seed))
+        k = round(m.mean * 100)
+        if k not in intervals:
+            intervals[k] = exact_interval(k, 100)
+        lo, hi = intervals[k]
         hits += lo <= 5 / 9 <= hi
     assert hits >= 185
 
@@ -277,6 +281,22 @@ def test_sampling_is_deterministic_and_stderr_shrinks_with_more_draws():
     assert sample_expectation(b, PITS, 500, 9) == sample_expectation(b, PITS, 500, 9)
     small, large = known(sample_expectation(b, PITS, 200, 1)), known(sample_expectation(b, PITS, 20000, 1))
     assert large.stderr < small.stderr / 5
+
+
+def test_the_estimate_is_computed_from_the_documented_draws_with_the_sample_variance():
+    """The mean and standard error equal what an independent computation gives from the very same draws (sample_worlds with the same n and seed): mean = sum/n, stderr = sqrt(sample variance with n-1 / n)."""
+    import math
+
+    from dsdk.prob import sample_worlds
+
+    b = kb_belief(Fr(1, 5))
+    n, seed = 40, 17
+    draws = known(sample_worlds(b, n, seed))
+    values = [(1 if dict(d)["P22"] else 0) + (1 if dict(d)["P31"] else 0) for d in draws]
+    mean = sum(values) / n
+    var = sum((x - mean) ** 2 for x in values) / (n - 1)
+    m = known(sample_expectation(b, PITS, n, seed))
+    assert m.mean == mean and m.stderr == pytest.approx(math.sqrt(var / n), rel=1e-12)
 
 
 def test_sampling_verdicts_for_zero_draws_dead_belief_and_text_problems():

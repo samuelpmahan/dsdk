@@ -79,3 +79,11 @@ Stub, tests (33, exhaustive up to 3 nodes plus a sample of 4-node graphs, Hypoth
 | any | ops/tasks/T62-prob-exact-interval.md | tests/prob/test_exact_interval.py | none | `exact_interval(successes, trials, confidence=0.95)` in `src/dsdk/prob/sampling.py`: Clopper-Pearson by 60 exact-rational (Fraction) bisections of the binomial tails, ends rounded outward, so coverage is at least the stated level for every n and p |
 
 Stub, 53 tests and export are in place. The tests pin 5/10, 0/10 and 33/35, check the tail equations with independent exact arithmetic, check exact coverage over a 1,000-point grid (where Wilson drops to about 84%), and compare with the Lab's JavaScript `exact()` extracted verbatim from lab/src/lab.html (skipped without node). New Proof 8 in tracks/A3/PROOFS.md gives the coverage argument. Touches only sampling.py.
+
+## Probability: expectations of typed Calc expressions (promoted dream, 2026-10-09)
+
+| Wave | Card file | Done command (tests) | Depends | What it builds |
+|---|---|---|---|---|
+| any | ops/tasks/T63-prob-expectation-calc.md | tests/integration/test_prob_expectation.py | none | `expectation(belief, calc_text, given_text=None)` and `sample_expectation` in `src/dsdk/prob/expect.py`: Calc text parsed, type-checked, evaluated per world with the bridge's `bind_assignment`, averaged exactly; INVALID for parse/type/non-Int problems, UNKNOWN for unmodelled variables |
+
+Stub, 34 tests and exports are in place. This makes `parse_calc`, `free_vars`, `typecheck`, `to_source`, `evaluate` and `bridge.bind_assignment` of the language package called by a later layer. When it passes, tracks.toml needs no further change for lang (the formula-text card already pays that debt).

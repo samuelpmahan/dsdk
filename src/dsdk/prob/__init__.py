@@ -13,6 +13,7 @@ Start with ``worlds.py`` (conventions), then ``bayesnet.py``, ``sampling.py``, `
 """
 from .ask import ask, ask_net, compare_text, observe_text, parse_text
 from .bayesnet import BayesNet, ancestors, ancestral_net, bayes_net, joint_belief
+from .expect import MeanEstimate, expectation, sample_expectation
 from .exact import to_prob, to_weight
 from .sampling import (
     Comparison,
@@ -54,6 +55,7 @@ from .worlds import (
 )
 
 __all__ = [
+    "MeanEstimate", "expectation", "sample_expectation",
     "ask", "ask_net", "compare_text", "observe_text", "parse_text",
     "Belief", "BayesNet", "Comparison", "Estimate", "MAX_VARIABLES", "NextTrackModel", "UnmodelledVariableError",
     "WeightedWorld", "Z95", "ancestors", "ancestral_net", "bayes_net", "belief_history", "compare_next_track",

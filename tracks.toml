@@ -37,4 +37,3 @@ track = "A3"
 order = 4
 min_imports = 3
 
-owed_to = "dsdk.worlds: next-track model fitted on the Lost Lands transition network"
