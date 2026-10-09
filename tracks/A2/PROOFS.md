@@ -23,21 +23,34 @@ Two lemmas are used everywhere.
 `Γ ⊢ l + r : T` implies `T = Int`, `Γ ⊢ l : Int`, `Γ ⊢ r : Int`. *Proof:* exactly one typing rule has a conclusion of that
 shape, so the derivation of the judgment ends with it. ∎
 
-**Canonical forms.** If `⊢ v : Int` and `v` is a value then `v = IntLit(n)` for some integer `n`; if `⊢ v : Bool` then
-`v = BoolLit(b)`. *Proof:* values are `IntLit` or `BoolLit`; by inversion `⊢ IntLit(n) : T` forces `T = Int` and
-`⊢ BoolLit(b) : T` forces `T = Bool`, so a value of type Int cannot be a `BoolLit` and vice versa. ∎
+**Canonical forms.** For ANY environment `Γ`: if `Γ ⊢ v : Int` and `v` is a value then `v = IntLit(n)` for some integer `n`; if `Γ ⊢ v : Bool` then
+`v = BoolLit(b)`. *Proof:* values are `IntLit` or `BoolLit`; by inversion `Γ ⊢ IntLit(n) : T` forces `T = Int` and `Γ ⊢ BoolLit(b) : T` forces `T = Bool`
+(the literal rules do not mention `Γ`), so a value of type Int cannot be a `BoolLit` and vice versa. ∎ (Nothing here needs the value to be
+closed: a value is a literal, and a literal has no variables. The statement is used below under arbitrary `Γ`.)
 
-**Substitution lemma.** If `Γ[x:=T1] ⊢ e : T` and `⊢ v : T1` for a literal `v`, then `Γ ⊢ e[x:=v] : T`. *Proof:* structural
-induction on `e`; the `Var x` case is `⊢ v : T1`; for `let y = b in body` with `y = x` the body is untouched and its
-judgment never used `x`; with `y ≠ x` apply the induction hypothesis to `b` and to `body` under `Γ[y:=…]`. (Tested by
-`test_substitution_lemma_*`.) ∎
+**Substitution.** `e[x:=v]` (for a literal `v`) replaces the free occurrences of `x`: `x[x:=v] = v`; `y[x:=v] = y` for `y ≠ x`; literals are unchanged; it commutes with
+the other constructors; and for `let y = b in body`: `(let y = b in body)[x:=v] = let y = b[x:=v] in body'` where `body' = body` if `y = x` (the binder
+shadows) and `body' = body[x:=v]` if `y ≠ x`. (This is `substitute` in `calc.py`; the bound term `b` is ALWAYS substituted into, because the binder `y` is not in scope in `b`.)
+
+**Exchange.** If `y ≠ x` then `Γ[x:=A][y:=B] = Γ[y:=B][x:=A]`; and `Γ[x:=A][x:=B] = Γ[x:=B]`. (Environments are finite maps; a later binding of the same name overrides.)
+
+**Substitution lemma.** If `Γ[x:=T1] ⊢ e : T` and `v` is a literal with `⊢ v : T1`, then `Γ ⊢ e[x:=v] : T`. *Proof:* structural induction on `e`, for ALL `Γ` at once
+(the induction hypothesis is used at different environments). A literal `v` has the type `T1` under every environment, since the literal rules do not look at `Γ`.
+* `e` a literal: unchanged, and its type does not depend on the environment. ✓
+* `e = Var x`: `Γ[x:=T1] ⊢ x : T` gives `T = T1`; `e[x:=v] = v`, and `Γ ⊢ v : T1`. ✓  `e = Var y`, `y ≠ x`: `Γ[x:=T1](y) = Γ(y)`, so `Γ ⊢ y : T` and `y[x:=v] = y`. ✓
+* `e` a `BinOp`, `Not` or `If`: invert the typing, apply the induction hypothesis to each child at the SAME `Γ`, rebuild with the same rule. ✓
+* `e = let y = b in body`, inversion: `Γ[x:=T1] ⊢ b : U` and `Γ[x:=T1][y:=U] ⊢ body : T`. The induction hypothesis on `b` (same `Γ`) gives `Γ ⊢ b[x:=v] : U`; this is needed in BOTH sub-cases.
+  *Case `y = x`:* the second premise reads `Γ[x:=U] ⊢ body : T` (the later binding overrides), and `e[x:=v] = let x = b[x:=v] in body`; T-Let applied to `Γ ⊢ b[x:=v] : U` and
+  `Γ[x:=U] ⊢ body : T` gives `Γ ⊢ e[x:=v] : T`. ✓  *Case `y ≠ x`:* by exchange the second premise is `Γ[y:=U][x:=T1] ⊢ body : T`; the induction hypothesis on `body` at the
+  environment `Γ[y:=U]` gives `Γ[y:=U] ⊢ body[x:=v] : T`; with `Γ ⊢ b[x:=v] : U`, T-Let gives `Γ ⊢ (let y = b[x:=v] in body[x:=v]) : T`. ✓ ∎
+(Tested by `test_substitution_lemma_*`.)
 
 ---
 
 ## Proof 1 -- Preservation, case `if`
 
-**Claim (Preservation).** If `Γ ⊢ e : T` and `e → e'` then `Γ ⊢ e' : T`. (Here with `Γ` arbitrary: the proof never uses
-closedness except where stated.)
+**Claim (Preservation).** If `Γ ⊢ e : T` and `e → e'` then `Γ ⊢ e' : T`. The proof is by cases on the last rule used for `e → e'`: Proof 1 treats `if`, Proof 2 treats `+` (and `-`, `*`), and Proof 2A below treats every other rule (`<`, `==`, `and`, `or`, `not`, `let`), so together they cover all rules. (Here `Γ` is arbitrary: no case below uses
+closedness; a value is a literal and that is all the computation rules look at.)
 
 Proof by induction on the derivation of `e → e'`, by cases on the last rule. We do the cases whose left-hand side is
 `e = if c then t else f`. By inversion on `Γ ⊢ e : T`: **`Γ ⊢ c : Bool`, `Γ ⊢ t : T`, `Γ ⊢ f : T`.**
@@ -58,8 +71,7 @@ Here `e = l + r`. By inversion on `Γ ⊢ e : T`: **`T = Int`, `Γ ⊢ l : Int`,
 * **B1:** `l → l'`, `e' = l' + r`. IH on `l → l'` gives `Γ ⊢ l' : Int`; T-Arith gives `Γ ⊢ l' + r : Int`. ✓
 * **B2:** `l = v` is a value, `r → r'`, `e' = v + r'`. IH gives `Γ ⊢ r' : Int`; with `Γ ⊢ v : Int`, T-Arith gives
   `Γ ⊢ v + r' : Int`. ✓
-* **B3:** `l` and `r` are both values and the rule applied is the integer one. By canonical forms (this is the step that
-  needs the values to be CLOSED literals) `l = IntLit(a)` and `r = IntLit(b)`, and `e' = IntLit(a+b)`. By T-Int,
+* **B3:** `l` and `r` are both values and the rule applied is the integer one. By canonical forms (valid under any `Γ`: it only uses that a value is a literal) `l = IntLit(a)` and `r = IntLit(b)`, and `e' = IntLit(a+b)`. By T-Int,
   `⊢ IntLit(a+b) : Int`, which is `T`. ✓
 
 The rules for `-` and `*` are identical with `a-b`, `a*b`. The case that does NOT occur is "B3 on a non-Int pair"
@@ -67,31 +79,55 @@ The rules for `-` and `*` are identical with `a-b`, `a*b`. The case that does NO
 well-typed terms (it would need `Γ ⊢ true : Int`). ∎
 
 *Where the tests fit:* `test_preservation_every_step_keeps_the_type` samples the claim on random well-typed programs; the
-`let` case needs the substitution lemma above and is sampled by `test_substitution_lemma_*`.
+`let` case (Proof 2A) needs the substitution lemma and is sampled by `test_substitution_lemma_*`.
+
+## Proof 2A -- Preservation, the remaining rules (`<`, `==`, `and`, `or`, `not`, `let`)
+
+Same induction on the derivation of `e → e'`, same hypothesis `Γ ⊢ e : T`, `Γ` arbitrary. In every case congruence rules are one line: the stepped child keeps its type by the
+induction hypothesis, the other children are unchanged, and the same typing rule rebuilds the node.
+
+**`l < r`** (T-Lt: `T = Bool`, `Γ ⊢ l : Int`, `Γ ⊢ r : Int`). B1, B2 as in Proof 2 (the children stay Int). B3: by canonical forms `l = IntLit(a)`, `r = IntLit(b)` and `e' = BoolLit(a < b)`,
+and `Γ ⊢ BoolLit(a < b) : Bool = T`. ✓
+
+**`l == r`** (T-Eq: `T = Bool`, `Γ ⊢ l : S`, `Γ ⊢ r : S` with the SAME `S`). B1, B2: the stepped child keeps type `S`, so T-Eq rebuilds `Bool`. B3: both are values of the same type `S`, so by canonical
+forms both are `IntLit` (if `S = Int`) or both `BoolLit` (if `S = Bool`); those are the only pairs that have a rule, and `e' = BoolLit(a == b)` has type `Bool = T`. The pair `IntLit`/`BoolLit` would need
+`S = Int` and `S = Bool` at once, so it cannot occur in a well-typed term (this is why `1 == true` is stuck AND ill-typed). ✓
+
+**`l and r`** (T-Logic: `T = Bool`, `Γ ⊢ l : Bool`, `Γ ⊢ r : Bool`). *A1:* `l → l'`, `e' = l' and r`: the induction hypothesis gives `Γ ⊢ l' : Bool`, T-Logic rebuilds `Bool`. (There is no rule that steps `r`.)
+*A2:* `l = BoolLit(False)`, `e' = BoolLit(False)`: the reduct is a literal of type `Bool = T`; it does not matter that `r` is discarded unexamined, because the claim is only about the reduct's type. *A3:* `l = BoolLit(True)`,
+`e' = r`: by inversion `Γ ⊢ r : Bool = T`. ✓ **`l or r`** mirrors it: O1 as A1; `BoolLit(True) or r → BoolLit(True)` is a `Bool` literal; `BoolLit(False) or r → r` and `Γ ⊢ r : Bool = T`. ✓
+
+**`not e0`** (T-Not: `T = Bool`, `Γ ⊢ e0 : Bool`). N1: the induction hypothesis gives `Γ ⊢ e0' : Bool` and T-Not rebuilds. Computation: `e0 = BoolLit(b)` by canonical forms and `e' = BoolLit(not b)` has type `Bool`. ✓
+
+**`let x = b in body`** (T-Let: `Γ ⊢ b : T1` and `Γ[x:=T1] ⊢ body : T`).
+* *L1 (congruence):* `b → b'`, `e' = let x = b' in body`. The induction hypothesis gives `Γ ⊢ b' : T1` with the SAME `T1`; so the premise about `body` (under `Γ[x:=T1]`) is unchanged, and T-Let gives `Γ ⊢ e' : T`. ✓
+* *L (computation):* `b = v` is a value and `e' = body[x:=v]`. By canonical forms `v` is a literal and `Γ ⊢ v : T1` is `⊢ v : T1` (literals do not use `Γ`). The substitution lemma, with `Γ[x:=T1] ⊢ body : T`,
+  gives `Γ ⊢ body[x:=v] : T`. ✓ This is the one rule whose reduct is built by a function other than "pick a child" or "rebuild the node", and it is exactly why the substitution lemma was proved above for ALL environments and with the
+  bound term always substituted into. The proof uses call-by-value twice: the rule only fires when `b` is a value (a literal), so the lemma's hypothesis "`v` is a literal" holds; and congruence L1 is what gets `b` there.
+
+Every rule of the semantics now has a case (B1-B3 for `+ - * < ==`, A1-A3, O1-O3, N1 with its computation rule, I1 with both computation rules, L1 and L), so **Preservation holds for every well-typed term**, and the rule
+that no step is possible for a literal or a variable needs no case. ∎
 
 ---
 
-## Proof 3 -- Progress (statement, one case proved)
+## Proof 3 -- Progress
 
 **Claim (Progress).** If `⊢ e : T` (empty environment) then `e` is a value or there is an `e'` with `e → e'`.
 
-Proof by induction on the typing derivation. The variable case is vacuous (`Γ` is empty, so `⊢ x : T` is not derivable).
-Literals are values. We prove the case `e = l + r`; the others (`-`, `*`, `<`, `==`, `and`, `or`, `not`, `if`, `let`) have
-the same shape: "if a subterm in an evaluation position can step, use the congruence rule; otherwise it is a value, and
-canonical forms say which literal it is, so the computation rule applies".
+Proof by induction on the typing derivation. The variable case is vacuous (`Γ` is empty, so `⊢ x : T` is not derivable). Literals are values. Inversion gives the premises of each case.
+* **`l ⊕ r`, `l < r`, `l == r`** (premises `⊢ l : S`, `⊢ r : S'` with `S = S' = Int` for arithmetic and `<`, and `S = S'` for `==`). (1) If `l` is not a value, the induction hypothesis gives `l → l'`, so B1 applies.
+  (2) Otherwise `l` is a value; if `r` is not a value the hypothesis gives `r → r'` and B2 applies. (3) Otherwise both are values of the same type; canonical forms give two `IntLit` or (for `==` at `Bool`) two `BoolLit`, and B3 applies.
+* **`l and r`, `l or r`** (`⊢ l : Bool`). If `l` is not a value, A1 (O1) applies. Otherwise `l` is a value of type `Bool`, hence a `BoolLit` (canonical forms), and A2/A3 (O2/O3) apply WITHOUT looking at `r`, so progress for `and`/`or` does
+  not even need `r` to be a value.
+* **`not e0`** (`⊢ e0 : Bool`). If `e0` is not a value, N1 applies; otherwise `e0 = BoolLit(b)` and the computation rule applies.
+* **`if c then t else f`** (`⊢ c : Bool`). If `c` is not a value, I1 applies; otherwise `c = BoolLit(b)` and I-true or I-false applies.
+* **`let x = b in body`**. If `b` is not a value, the hypothesis on `⊢ b : T1` gives `b → b'` and L1 applies; otherwise `b` is a value and L applies (`substitute` is defined for every body and every literal).
+Every typing rule is covered. ∎
 
-**Case `l + r`.** Inversion: `⊢ l : Int` and `⊢ r : Int`. The induction hypothesis applies to both.
-1. If `l` is not a value, IH gives `l → l'`, so B1 gives `l + r → l' + r`.
-2. Otherwise `l` is a value; if `r` is not a value, IH gives `r → r'`, and B2 gives `l + r → l + r'`.
-3. Otherwise both are values of type Int; canonical forms give `l = IntLit(a)`, `r = IntLit(b)`, and B3 gives
-   `l + r → IntLit(a+b)`. ∎
-
-(The `and` case differs only in step 3: `l` is a `BoolLit`, and A2/A3 apply WITHOUT looking at `r`, so progress for `and` does
-not even need `r` to be a value.)
-
-**Corollary (type safety).** A closed well-typed term never gets stuck: by Progress it can step unless it is a value, by
-Preservation the reduct is again well-typed and closed (substitution only removes free variables), so repeating this reaches
-a value. This is `test_type_safety_*` and `test_stuck_terms_are_ill_typed`.
+**Corollary (type safety).** A closed well-typed term never gets stuck, and its evaluation ends in a value of the same type. *Proof:* by Progress, a closed well-typed term is a value or can step; by Preservation (with `Γ` empty) the reduct is
+again well-typed under the empty environment, which also means it is closed (a typing derivation under the empty environment has no free variable). So the repetition "step, stay well-typed, stay closed" never reaches a stuck term. **It
+ends because of Proof 4** (the size strictly decreases at each step, so there is no infinite sequence); without Proof 4 these two facts would only say that stuck is impossible, not that a value is reached. The final term is
+not stuck and cannot step, so by Progress it is a value, and by Preservation its type is the original `T`. This is `test_type_safety_*` and `test_stuck_terms_are_ill_typed`.
 
 ---
 
@@ -158,3 +194,14 @@ evaluates the bound expression first). These three programs are in `fixtures/lan
 The true statement is only (⇒): *stuck implies ill-typed* (the contrapositive of type safety). The converse is false because
 a static type system must be sound for every possible execution, so it rejects some programs that happen to run fine; by
 Rice's theorem no computable checker can be both sound and exactly complete for a non-trivial semantic property.
+
+---
+
+## After audit (changes made in response to tracks/A2/AUDIT.md)
+
+| Audit finding | What was wrong | Fix |
+|---|---|---|
+| Preservation claimed in general but only `if` and `+` proved | `let`, `and`, `or`, `==`, `<`, `not` and the `let` congruence were asserted | New Proof 2A proves every remaining rule, including `let` with the substitution lemma applied at the extended environment, and the A1/A2/A3 case split for `and` (and the mirror for `or`); the Claim now names which proof covers which rule |
+| Canonical forms stated for the empty environment but used under an arbitrary `Γ` | The statement was weaker than its use, and the parenthetical "needs the values to be CLOSED literals" was misleading | Canonical forms is stated and proved for arbitrary `Γ` (a value is a literal; literal rules ignore `Γ`); the parenthetical in Proof 2 is replaced |
+| Substitution lemma omitted the bound term | For `let y = b in body` with `y = x` the proof said "the body is untouched" and stopped, though `b` is still substituted | Substitution defined explicitly (bound term always substituted, body only when `y ≠ x`), exchange stated, both sub-cases of `let` proved, with the induction hypothesis on `b` used in both |
+| Progress proved for one case, corollary leaned on termination without saying so | "repeating this reaches a value" needs Proof 4 | Progress now proves every case (`<`, `==`, `and`, `or`, `not`, `if`, `let`, and the arithmetic family); the corollary says explicitly that termination comes from Proof 4 and why closedness is preserved |
