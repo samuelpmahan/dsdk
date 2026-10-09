@@ -157,6 +157,39 @@ def formula_labels(f: Formula) -> tuple[str, ...]:
     return tuple(labels)
 
 
+def _import_targets(path: Path, pkg: list[str], top: str, subs: set[str]) -> set[str]:
+    """Names of the subpackages (members of ``subs``) that the file ``path`` imports, anywhere in the file.
+
+    ``pkg`` is the file's package path, e.g. ``["dsdk", "a", "deep"]`` for ``dsdk/a/deep/mod.py``. Resolution follows
+    the rules in :func:`import_graph`. The caller removes the importing subpackage itself.
+    """
+    import ast
+
+    tree = ast.parse(path.read_text())
+    targets: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if parts[0] == top and len(parts) >= 2:
+                    targets.add(parts[1])
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0:
+                full = (node.module or "").split(".")
+            else:
+                drop = node.level - 1
+                if drop >= len(pkg):
+                    continue
+                full = pkg[: len(pkg) - drop] + (node.module.split(".") if node.module else [])
+            if full[0] != top:
+                continue
+            if len(full) >= 2:
+                targets.add(full[1])
+            else:
+                targets.update(alias.name for alias in node.names)
+    return {name for name in targets if name in subs}
+
+
 def import_graph(package_root: str | Path) -> Graph:
     """The import graph between the immediate subpackages of one package, e.g. ``dsdk.core``, ``dsdk.logic``.
 
@@ -184,4 +217,23 @@ def import_graph(package_root: str | Path) -> Graph:
     Imports of a name that is not a subpackage node are ignored (never an error). A ``SyntaxError`` in a file
     propagates.
     """
-    raise NotImplementedError
+    root = Path(package_root)
+    if not root.is_dir():
+        raise FileNotFoundError(f"no such package directory: {root}")
+    top = root.name
+    subs = sorted(p.name for p in root.iterdir() if p.is_dir() and (p / "__init__.py").exists())
+    sub_set = set(subs)
+    edges: set[tuple[str, str]] = set()
+    for a in subs:
+        for path in (root / a).rglob("*.py"):
+            pkg = [top, *path.parent.relative_to(root).parts]
+            for b in _import_targets(path, pkg, top, sub_set):
+                if b != a:
+                    edges.add((a, b))
+    nodes = [f"{top}.{name}" for name in subs]
+    return Graph.from_edges(
+        [Edge(f"{top}.{a}", f"{top}.{b}") for a, b in sorted(edges)],
+        nodes,
+        directed=True,
+        closed_world=True,
+    )

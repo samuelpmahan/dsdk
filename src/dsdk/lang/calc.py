@@ -101,6 +101,7 @@ recursion is fine only if it uses at most about 2 Python frames per nesting leve
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Mapping
@@ -137,7 +138,25 @@ class Expr:
 
     def __post_init__(self) -> None:
         # Validation rules are in the module docstring. Implemented once here for all subclasses (see task T09).
-        raise NotImplementedError
+        t = type(self)
+        if t is IntLit:
+            if type(self.value) is not int:
+                raise TypeError(f"IntLit.value must be an int, not {type(self.value).__name__}")
+        elif t is BoolLit:
+            if type(self.value) is not bool:
+                raise TypeError(f"BoolLit.value must be a bool, not {type(self.value).__name__}")
+        elif t is Var or t is Let:
+            if not isinstance(self.name, str):
+                raise TypeError(f"{t.__name__} name must be a str, not {type(self.name).__name__}")
+            if not re.fullmatch(_NAME_PATTERN, self.name, re.ASCII) or self.name in CALC_KEYWORDS:
+                raise ValueError(f"invalid {t.__name__} name: {self.name!r}")
+        elif t is BinOp:
+            if self.op not in OPS:
+                raise ValueError(f"unknown BinOp operator: {self.op!r}")
+        for field_name in _CHILD_FIELDS.get(t, ()):
+            child = getattr(self, field_name)
+            if not isinstance(child, Expr):
+                raise TypeError(f"{t.__name__}.{field_name} must be an Expr, not {type(child).__name__}")
 
 
 @dataclass(frozen=True)
@@ -182,17 +201,63 @@ class Let(Expr):
 
 
 # ----------------------------------------------------------------------------- structure
+_NAME_PATTERN = r"[A-Za-z_][A-Za-z0-9_]*"
+
+_CHILD_FIELDS = {
+    BinOp: ("left", "right"),
+    Not: ("operand",),
+    If: ("cond", "then", "orelse"),
+    Let: ("bound", "body"),
+}
+
+
+def _require_expr(x: object) -> None:
+    if not isinstance(x, Expr):
+        raise TypeError(f"expected a Calc Expr, not {type(x).__name__}")
+
+
+def _children(e: Expr) -> tuple[Expr, ...]:
+    if isinstance(e, BinOp):
+        return (e.left, e.right)
+    if isinstance(e, Not):
+        return (e.operand,)
+    if isinstance(e, If):
+        return (e.cond, e.then, e.orelse)
+    if isinstance(e, Let):
+        return (e.bound, e.body)
+    return ()
+
+
 def size(e: Expr) -> int:
     """Tree size: number of Expr nodes counting every occurrence. Literals and Var are 1; ``BinOp``/``Let`` are
     ``1 + size(l) + size(r)`` (the binder NAME is not a node); ``Not`` is ``1 + size(operand)``; ``If`` is
     ``1 + size(cond) + size(then) + size(orelse)``. ``TypeError`` if ``e`` is not an Expr."""
-    raise NotImplementedError
+    _require_expr(e)
+    count = 0
+    stack: list[Expr] = [e]
+    while stack:
+        node = stack.pop()
+        count += 1
+        stack.extend(_children(node))
+    return count
 
 
 def free_vars(e: Expr) -> frozenset[str]:
     """Names occurring free. ``Let(x, b, body)``: free(b) | (free(body) - {x}) -- note ``x`` stays free in ``b``:
     ``free_vars(parse_calc("let x = x in x")) == {"x"}``. ``TypeError`` if ``e`` is not an Expr."""
-    raise NotImplementedError
+    _require_expr(e)
+    return _free(e)
+
+
+def _free(e: Expr) -> frozenset[str]:
+    if isinstance(e, Var):
+        return frozenset({e.name})
+    if isinstance(e, Let):
+        return _free(e.bound) | (_free(e.body) - {e.name})
+    out: frozenset[str] = frozenset()
+    for child in _children(e):
+        out |= _free(child)
+    return out
 
 
 def substitute(e: Expr, name: str, value: Expr) -> Expr:
@@ -204,30 +269,77 @@ def substitute(e: Expr, name: str, value: Expr) -> Expr:
     ``Let("x", IntLit(1), Var("x"))``. Returns an equal Expr when ``name`` is not free. ``TypeError`` if ``e`` is not an Expr
     or ``name`` is not a str.
     """
-    raise NotImplementedError
+    _require_expr(e)
+    if not isinstance(name, str):
+        raise TypeError(f"name must be a str, not {type(name).__name__}")
+    if not isinstance(value, (IntLit, BoolLit)):
+        raise TypeError(f"value must be an IntLit or BoolLit, not {type(value).__name__}")
+    return _subst(e, name, value)
+
+
+def _subst(e: Expr, name: str, value: Expr) -> Expr:
+    if isinstance(e, Var):
+        return value if e.name == name else e
+    if isinstance(e, (IntLit, BoolLit)):
+        return e
+    if isinstance(e, BinOp):
+        return BinOp(e.op, _subst(e.left, name, value), _subst(e.right, name, value))
+    if isinstance(e, Not):
+        return Not(_subst(e.operand, name, value))
+    if isinstance(e, If):
+        return If(_subst(e.cond, name, value), _subst(e.then, name, value), _subst(e.orelse, name, value))
+    # Let: the bound expression is always searched; the body only when the binder does not shadow `name`.
+    bound = _subst(e.bound, name, value)
+    body = _subst(e.body, name, value) if e.name != name else e.body
+    return Let(e.name, bound, body)
 
 
 def is_value(e: Expr) -> bool:
     """True exactly for ``IntLit`` and ``BoolLit``. ``TypeError`` for a non-Expr."""
-    raise NotImplementedError
+    _require_expr(e)
+    return isinstance(e, (IntLit, BoolLit))
 
 
 def to_python(v: Expr) -> int | bool:
     """The Python value of a value node: ``IntLit(3) -> 3`` (an ``int``), ``BoolLit(True) -> True`` (a ``bool``).
     ``ValueError`` if ``v`` is an Expr but not a value; ``TypeError`` if it is not an Expr."""
-    raise NotImplementedError
+    _require_expr(v)
+    if not is_value(v):
+        raise ValueError(f"not a value: {to_source(v)}")
+    return v.value
 
 
 def from_python(x: int | bool) -> Expr:
     """Inverse of ``to_python``. CHECK ``bool`` FIRST (``isinstance(True, int)`` is true): ``from_python(True)`` is
     ``BoolLit(True)``, ``from_python(1)`` is ``IntLit(1)``. Anything else: ``TypeError``."""
-    raise NotImplementedError
+    if isinstance(x, bool):
+        return BoolLit(x)
+    if isinstance(x, int):
+        return IntLit(x)
+    raise TypeError(f"not a Calc value: {type(x).__name__}")
 
 
 # ----------------------------------------------------------------------------- syntax
 def to_source(e: Expr) -> str:
     """Canonical fully-parenthesised source (module docstring). ``TypeError`` if ``e`` is not an Expr."""
-    raise NotImplementedError
+    _require_expr(e)
+    return _src(e)
+
+
+def _src(e: Expr) -> str:
+    if isinstance(e, IntLit):
+        return str(e.value)
+    if isinstance(e, BoolLit):
+        return "true" if e.value else "false"
+    if isinstance(e, Var):
+        return e.name
+    if isinstance(e, BinOp):
+        return f"({_src(e.left)} {e.op} {_src(e.right)})"
+    if isinstance(e, Not):
+        return f"(not {_src(e.operand)})"
+    if isinstance(e, If):
+        return f"(if {_src(e.cond)} then {_src(e.then)} else {_src(e.orelse)})"
+    return f"(let {e.name} = {_src(e.bound)} in {_src(e.body)})"
 
 
 def parse_calc(text: str) -> Expr:
