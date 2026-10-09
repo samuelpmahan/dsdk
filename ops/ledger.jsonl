@@ -11,3 +11,4 @@
 {"ts": 1791494471, "task": "T05", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 420, "tests_passed": 85, "tests_total": 85, "round": 3, "note": ""}
 {"ts": 1791494496, "task": "T08", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 280, "tests_passed": 42, "tests_total": 42, "round": 3, "note": "spawned stray remote session, left unarchived (planner archived it)"}
 {"ts": 1791494526, "task": "T06", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 28, "tests_passed": 300, "tests_total": 300, "round": 4, "note": ""}
+{"ts": 1791504148, "task": "T40", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 26, "tests_passed": 105, "tests_total": 105, "round": 5, "note": "attempted remote send_message; denied by permission mode"}
