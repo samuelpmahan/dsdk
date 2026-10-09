@@ -1,0 +1,66 @@
+"""Reachability with epistemic status: "a missing edge is not proof of impossibility".
+
+``reachable`` answers "is there a path from s to t?" with a :class:`dsdk.core.Judgment`, not a bool, because a
+bool cannot say "I do not know". Edge evidence follows the mapping in ``dsdk.graph.model``: KNOWN = observed;
+UNKNOWN / NOT_OBSERVED = uncertain (inferred / candidate).
+
+Decision table for ``reachable(g, source, target)`` (checked in this order)
+---------------------------------------------------------------------------
+1. ``source`` or ``target`` not a node of ``g``  ->  ``Judgment(Status.INVALID, reason=...)`` (a Judgment, NOT an
+   exception: the question was ill-posed). The reason names the missing node with ``repr``:
+   ``"node 'x' is not in the graph"`` (if both are missing, name the source).
+2. A path exists using ONLY KNOWN edges (``source == target`` always counts: the empty path)
+   ->  ``Judgment(Status.KNOWN, True, "known path: a -> b -> c")``. The path is ``shortest_path`` of
+   ``known_subgraph(g)``; nodes are rendered with ``str`` and joined by ``" -> "`` (also for undirected graphs).
+3. No known path, but a path exists when uncertain edges are counted
+   ->  ``Judgment(Status.UNKNOWN, None, reason)`` with reason
+   ``"uncertain edges on best candidate path: a->b (unknown), c->d (not_observed)"``: the uncertain edges of
+   :func:`candidate_path`, in path order, each as ``f"{u}->{v} ({edge.evidence.value})"`` where ``u->v`` is the
+   direction in which the path walks it, joined by ``", "``.
+4. No path at all, even counting every edge, and ``g.closed_world`` is True
+   ->  ``Judgment(Status.KNOWN, False, "closed world: no path from a to b even counting uncertain edges")``
+   (``a`` / ``b`` are ``str(source)`` / ``str(target)``).
+5. No path at all and the world is open
+   ->  ``Judgment(Status.UNKNOWN, None, "open world: no path found, but absence of an edge is not proof of impossibility")``.
+
+So KNOWN False is possible ONLY in a closed world, and KNOWN True never needs the world flag.
+"""
+from __future__ import annotations
+
+from typing import Hashable
+
+from dsdk.core import Judgment, Status
+
+from .model import Graph
+
+UNCERTAIN: tuple[Status, ...] = (Status.UNKNOWN, Status.NOT_OBSERVED)
+"""The edge statuses that do not count as observed."""
+
+
+def known_subgraph(g: Graph) -> Graph:
+    """A graph with the same ``nodes`` (same order, so isolated nodes survive), the same ``directed`` and
+    ``closed_world`` flags, and only the edges whose evidence is ``Status.KNOWN``."""
+    raise NotImplementedError
+
+
+def candidate_path(g: Graph, source: Hashable, target: Hashable) -> tuple[Hashable, ...] | None:
+    """The best path from ``source`` to ``target`` when ALL edges (of any evidence) may be used, or ``None``.
+
+    "Best" is the path minimising, in this order:
+      1. the number of uncertain (non-KNOWN) edges on it,
+      2. its number of edges (hops),
+      3. its sequence of node-order indices, compared lexicographically (smaller first).
+    ``source == target`` gives ``(source,)``. ``MissingNodeError`` if either node is absent.
+    Because the key is a total order on paths the answer is unique. Suggested algorithm: Dijkstra over states
+    ``(uncertain_count, hops, index_path)``: push ``(0, 0, (index_of(source),))``; pop the smallest; the first
+    pop that ends at ``target`` is the answer; a node already settled is skipped; extending by one edge adds 1 to
+    hops, adds 1 to the uncertain count iff the edge is not KNOWN, and appends the neighbour's index. (Extending
+    two equal-length paths cannot reorder them, so this is exact.)
+    """
+    raise NotImplementedError
+
+
+def reachable(g: Graph, source: Hashable, target: Hashable) -> Judgment:
+    """Is ``target`` reachable from ``source``? See the decision table in the module docstring (exact reason
+    strings included). Directed graphs follow edge direction. Must not raise for any pair of query nodes."""
+    raise NotImplementedError
