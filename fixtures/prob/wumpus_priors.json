@@ -1,0 +1,166 @@
+{
+ "note": "Oracle: embodiedwumpusworld src/priors.js breezeExperiment(p) on branch lab/wumpus-core. Two neighbours A,B, independent pits with prior p, perfect adjacent-pit breeze observed. Labels: 'Neither' (impossible given the breeze), 'A only', 'B only', 'Both'. js_* are the JS floats; prior_exact is the prior as an exact fraction string. Regenerate with node (see tests/prob/test_wumpus_oracle.py for the optional live parity check). With prior 0 the JS throws (positive total weight required): dsdk.prob must answer INVALID instead.",
+ "neighbours": [
+  "A",
+  "B"
+ ],
+ "cases": [
+  {
+   "prior": 0.05,
+   "prior_exact": "1/20",
+   "js_prior_weights": {
+    "Neither": 0.9025,
+    "A only": 0.0475,
+    "B only": 0.0475,
+    "Both": 0.0025000000000000005
+   },
+   "js_posterior": {
+    "Neither": 0,
+    "A only": 0.48717948717948717,
+    "B only": 0.48717948717948717,
+    "Both": 0.025641025641025644
+   },
+   "js_probability_A": 0.5128205128205128
+  },
+  {
+   "prior": 0.1,
+   "prior_exact": "1/10",
+   "js_prior_weights": {
+    "Neither": 0.81,
+    "A only": 0.09000000000000001,
+    "B only": 0.09000000000000001,
+    "Both": 0.010000000000000002
+   },
+   "js_posterior": {
+    "Neither": 0,
+    "A only": 0.47368421052631576,
+    "B only": 0.47368421052631576,
+    "Both": 0.052631578947368425
+   },
+   "js_probability_A": 0.5263157894736842
+  },
+  {
+   "prior": 0.2,
+   "prior_exact": "1/5",
+   "js_prior_weights": {
+    "Neither": 0.6400000000000001,
+    "A only": 0.16000000000000003,
+    "B only": 0.16000000000000003,
+    "Both": 0.04000000000000001
+   },
+   "js_posterior": {
+    "Neither": 0,
+    "A only": 0.4444444444444444,
+    "B only": 0.4444444444444444,
+    "Both": 0.1111111111111111
+   },
+   "js_probability_A": 0.5555555555555556
+  },
+  {
+   "prior": 0.25,
+   "prior_exact": "1/4",
+   "js_prior_weights": {
+    "Neither": 0.5625,
+    "A only": 0.1875,
+    "B only": 0.1875,
+    "Both": 0.0625
+   },
+   "js_posterior": {
+    "Neither": 0,
+    "A only": 0.42857142857142855,
+    "B only": 0.42857142857142855,
+    "Both": 0.14285714285714285
+   },
+   "js_probability_A": 0.5714285714285714
+  },
+  {
+   "prior": 0.3,
+   "prior_exact": "3/10",
+   "js_prior_weights": {
+    "Neither": 0.48999999999999994,
+    "A only": 0.21,
+    "B only": 0.21,
+    "Both": 0.09
+   },
+   "js_posterior": {
+    "Neither": 0,
+    "A only": 0.4117647058823529,
+    "B only": 0.4117647058823529,
+    "Both": 0.1764705882352941
+   },
+   "js_probability_A": 0.588235294117647
+  },
+  {
+   "prior": 0.5,
+   "prior_exact": "1/2",
+   "js_prior_weights": {
+    "Neither": 0.25,
+    "A only": 0.25,
+    "B only": 0.25,
+    "Both": 0.25
+   },
+   "js_posterior": {
+    "Neither": 0,
+    "A only": 0.3333333333333333,
+    "B only": 0.3333333333333333,
+    "Both": 0.3333333333333333
+   },
+   "js_probability_A": 0.6666666666666666
+  },
+  {
+   "prior": 0.75,
+   "prior_exact": "3/4",
+   "js_prior_weights": {
+    "Neither": 0.0625,
+    "A only": 0.1875,
+    "B only": 0.1875,
+    "Both": 0.5625
+   },
+   "js_posterior": {
+    "Neither": 0,
+    "A only": 0.2,
+    "B only": 0.2,
+    "Both": 0.6
+   },
+   "js_probability_A": 0.8
+  },
+  {
+   "prior": 0.9,
+   "prior_exact": "9/10",
+   "js_prior_weights": {
+    "Neither": 0.009999999999999995,
+    "A only": 0.08999999999999998,
+    "B only": 0.08999999999999998,
+    "Both": 0.81
+   },
+   "js_posterior": {
+    "Neither": 0,
+    "A only": 0.0909090909090909,
+    "B only": 0.0909090909090909,
+    "Both": 0.8181818181818182
+   },
+   "js_probability_A": 0.9090909090909092
+  },
+  {
+   "prior": 1,
+   "prior_exact": "1",
+   "js_prior_weights": {
+    "Neither": 0,
+    "A only": 0,
+    "B only": 0,
+    "Both": 1
+   },
+   "js_posterior": {
+    "Neither": 0,
+    "A only": 0,
+    "B only": 0,
+    "Both": 1
+   },
+   "js_probability_A": 1
+  }
+ ],
+ "zero_prior": {
+  "prior": 0,
+  "js_error": "RangeError: conditionWeights requires a positive finite total weight"
+ }
+}

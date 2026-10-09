@@ -511,9 +511,62 @@ def trace(e: Expr) -> list[Expr]:
         out.append(nxt)
 
 
+class _Stuck(Exception):
+    """Internal: raised by :func:`_go` when evaluation gets stuck; converted to StuckError by :func:`evaluate`."""
+
+
+def _go(e: Expr, env: dict[str, int | bool]) -> int | bool:
+    """Environment-based evaluation of ``e``; same order and short-circuiting as the small-step rules."""
+    if isinstance(e, (IntLit, BoolLit)):
+        return e.value
+    if isinstance(e, Var):
+        if e.name not in env:
+            raise _Stuck()
+        return env[e.name]
+    if isinstance(e, Not):
+        v = _go(e.operand, env)
+        if type(v) is not bool:
+            raise _Stuck()
+        return not v
+    if isinstance(e, If):
+        c = _go(e.cond, env)
+        if type(c) is not bool:
+            raise _Stuck()
+        return _go(e.then if c else e.orelse, env)
+    if isinstance(e, Let):
+        v = _go(e.bound, env)
+        return _go(e.body, {**env, e.name: v})
+    if e.op in ("and", "or"):
+        left = _go(e.left, env)
+        if type(left) is not bool:
+            raise _Stuck()
+        if e.op == "and":
+            return _go(e.right, env) if left else False
+        return True if left else _go(e.right, env)
+    lv = _go(e.left, env)
+    rv = _go(e.right, env)
+    if type(lv) is int and type(rv) is int:
+        if e.op == "+":
+            return lv + rv
+        if e.op == "-":
+            return lv - rv
+        if e.op == "*":
+            return lv * rv
+        if e.op == "<":
+            return lv < rv
+        return lv == rv  # "=="
+    if e.op == "==" and type(lv) is bool and type(rv) is bool:
+        return lv == rv
+    raise _Stuck()
+
+
 def evaluate(e: Expr) -> int | bool:
     """Big-step reference evaluator (module docstring). Returns a Python ``int`` (for Int results) or ``bool`` (for Bool
     results; use ``type(x) is bool`` to tell them apart, never ``== 1``). Arithmetic is exact Python int arithmetic.
     Raises :class:`StuckError` (with ``.term`` = ``e``) when evaluation gets stuck, including for free variables.
     MUST NOT call ``step``/``trace`` (it is the independent oracle the tests compare them against)."""
-    raise NotImplementedError
+    _require_expr(e)
+    try:
+        return _go(e, {})
+    except _Stuck:
+        raise StuckError(e) from None
