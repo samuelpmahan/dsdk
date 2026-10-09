@@ -233,9 +233,12 @@ export function mountSixDegrees(root, world, opts = {}) {
         h('span', { class: 'title' }, trackTitle(world, id)), ' ', h('span', { class: 'artist' }, `by ${trackArtists(world, id)}`)));
       const hp = res.hops[i];
       if (hp) {
-        const names = [...new Set(hp.sets.map(([g]) => djOf(world, g)))];
+        const [g0, d0] = hp.sets[0];
+        const more = hp.sets.length > 1 ? ` (and ${hp.sets.length - 1} other set${hp.sets.length > 2 ? 's' : ''})` : '';
         chain.append(h('li', { class: `hop ${hp.evidence}`, 'data-evidence': hp.evidence },
-          hp.evidence === 'known' ? `then, played by ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''}` : `then (inferred), both in ${names.slice(0, 2).join(', ')}'s set${names.length > 1 ? 's' : ''}`));
+          hp.evidence === 'known'
+            ? `${djOf(world, g0)} played these two back to back on ${dateOf(world, d0)}${more}`
+            : `inferred, never seen back to back: both were in ${djOf(world, g0)}'s set on ${dateOf(world, d0)}${more}`));
       }
     });
     const rows = res.hops.map((hp, i) => [`${i + 1}. ${labels[hp.source]}  →  ${labels[hp.target]}`, hp.evidence.toUpperCase(), hopEvidenceText(world, hp)]);

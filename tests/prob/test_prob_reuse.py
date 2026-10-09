@@ -29,7 +29,9 @@ def imported_packages(module_file):
     return found
 
 
+# ==== The probability package genuinely builds on logic, core and graph ====
 def test_prob_is_registered_after_graph_and_lang():
+    """The probability package is registered in tracks.toml as track A3 with order 4 (after the graph package at order 3 and the language package at order 2), requires at least 3 earlier packages and needs no waiver."""
     meta = REGISTRY["dsdk.prob"]
     assert meta["track"] == "A3" and meta["order"] == 4 and meta["min_imports"] == 3
     assert REGISTRY["dsdk.graph"]["order"] == 3 and REGISTRY["dsdk.lang"]["order"] == 2
@@ -37,6 +39,7 @@ def test_prob_is_registered_after_graph_and_lang():
 
 
 def test_import_graph_shows_edges_to_logic_core_and_graph_only_backwards():
+    """The repository's own import graph, built with the graph package, shows the probability package importing logic, core and graph, and only packages of lower order."""
     g = import_graph(SRC)
     out = {e.target for e in g.edges if e.source == "dsdk.prob"}
     assert {"dsdk.logic", "dsdk.core", "dsdk.graph"} <= out
@@ -55,6 +58,7 @@ def test_import_graph_shows_edges_to_logic_core_and_graph_only_backwards():
     ],
 )
 def test_each_module_imports_the_tracks_it_is_documented_to_use(module, needs):
+    """Each probability module imports the earlier packages it is documented to build on (worlds on logic and core, Bayes nets on logic, core and graph, sampling on logic, core and graph, updates on logic and core, transitions on graph and core)."""
     assert needs <= imported_packages(module)
 
 

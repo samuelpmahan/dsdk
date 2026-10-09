@@ -15,8 +15,9 @@ from prob_helpers import Fr, formulas, prior_maps, ref_eval, ref_vars, ref_world
 A, B, C = Var("A"), Var("B"), Var("C")
 
 
-# ------------------------------------------------------------------ WeightedWorld / Belief validation
+# ==== Weighted worlds and beliefs reject malformed contents ====
 def test_weighted_world_basic_and_assignment_is_a_fresh_dict():
+    """A weighted world returns its assignment as a fresh dict each time, so changing the returned dict does not change the world, and equal worlds hash equally."""
     w = WeightedWorld((("A", False), ("B", True)), Fr(1, 4))
     assert w.assignment() == {"A": False, "B": True}
     w.assignment()["A"] = True
@@ -25,6 +26,7 @@ def test_weighted_world_basic_and_assignment_is_a_fresh_dict():
 
 
 def test_weighted_world_is_frozen():
+    """A weighted world cannot be modified after creation."""
     w = WeightedWorld((("A", True),), Fr(1))
     with pytest.raises(dataclasses.FrozenInstanceError):
         w.weight = Fr(2)
@@ -46,6 +48,7 @@ def test_weighted_world_is_frozen():
     ],
 )
 def test_weighted_world_validation(values, weight, exc):
+    """A weighted world rejects list values, non-boolean values (1), non-string names, malformed pairs, unsorted or duplicate names, non-Fraction weights, and negative weights."""
     with pytest.raises(exc):
         WeightedWorld(values, weight)
 
@@ -56,6 +59,7 @@ def test_empty_world_is_legal():
 
 
 def test_belief_validation():
+    """A belief rejects non-tuple or non-string variables, unsorted or duplicate variables, non-tuple worlds, non-world items, and worlds that do not range over exactly its variables."""
     w = WeightedWorld((("A", True),), Fr(1))
     Belief(("A",), (w,))
     with pytest.raises(TypeError):
@@ -77,6 +81,7 @@ def test_belief_validation():
 
 
 def test_belief_total_and_mass():
+    """A belief's total and the mass of a formula are exact fractions: for two fair coins total is 1, P(A) mass is 1/2, A-and-B is 1/4, false is 0, and an empty belief has total Fraction(0)."""
     b = prior_belief({"A": Fr(1, 2), "B": Fr(1, 2)})
     assert b.total == 1
     assert b.mass(A) == Fr(1, 2)
@@ -88,6 +93,7 @@ def test_belief_total_and_mass():
 
 
 def test_mass_rejects_non_formulas_and_unmodelled_variables():
+    """Mass rejects a non-formula with a TypeError and a formula over unmodelled variables with an error that lists the missing names sorted."""
     b = prior_belief({"A": Fr(1, 2)})
     with pytest.raises(TypeError):
         b.mass("A")
@@ -97,7 +103,7 @@ def test_mass_rejects_non_formulas_and_unmodelled_variables():
     assert isinstance(info.value, ValueError)
 
 
-# ------------------------------------------------------------------ prior_belief
+# ==== Building a belief from independent priors and a constraint ====
 def test_docstring_example_order_and_weights():
     """Order is logic.models order: A=False before A=True, first variable slowest; weights 4/25, 4/25, 1/25."""
     b = prior_belief({"A": 0.2, "B": 0.2}, Or(A, B))
@@ -108,6 +114,7 @@ def test_docstring_example_order_and_weights():
 
 
 def test_no_constraint_gives_all_worlds_summing_to_one():
+    """Without a constraint a prior over three variables has 8 worlds summing to 1, and each world's weight is the product of the independent priors."""
     b = prior_belief({"A": Fr(1, 5), "B": Fr(1, 3), "C": Fr(3, 4)})
     assert len(b.worlds) == 8
     assert b.total == 1
@@ -117,6 +124,7 @@ def test_no_constraint_gives_all_worlds_summing_to_one():
 
 
 def test_priors_may_be_floats_ints_or_fractions_mixed():
+    """Priors may mix floats, ints and Fractions."""
     b = prior_belief({"A": 0.25, "B": 1, "C": Fr(1, 2)})
     assert b.total == 1
     assert b.mass(B) == 1
@@ -131,6 +139,7 @@ def test_zero_weight_worlds_are_kept():
 
 
 def test_certain_prior_zeroes_the_other_branch():
+    """A prior of 1 gives the false world weight 0 and the true world weight 1."""
     b = prior_belief({"A": 1})
     assert [w.weight for w in b.worlds] == [Fr(0), Fr(1)]
 
@@ -152,44 +161,52 @@ def test_prior_for_variable_absent_from_constraint_still_enumerated():
 
 
 def test_unsatisfiable_constraint_gives_no_worlds_and_zero_total():
+    """A contradictory constraint gives a belief with no worlds and total weight 0, but it still lists the variable."""
     b = prior_belief({"A": Fr(1, 2)}, And(A, Not(A)))
     assert b.worlds == () and b.total == 0 and b.variables == ("A",)
 
 
 def test_empty_priors_and_no_constraint_is_one_empty_world():
+    """With no priors and no constraint there is exactly one world, the empty assignment, with weight 1."""
     b = prior_belief({})
     assert b.variables == () and len(b.worlds) == 1 and b.worlds[0].weight == 1
 
 
 def test_constant_constraint_only():
+    """A constant-false constraint gives no worlds and a constant-true constraint gives one empty world."""
     assert prior_belief({}, Const(False)).worlds == ()
     assert len(prior_belief({}, Const(True)).worlds) == 1
 
 
 @pytest.mark.parametrize("bad", [[("A", 0.5)], None, "A", [0.5]])
 def test_priors_must_be_a_mapping(bad):
+    """Priors given as a list of pairs, None, a string or a list are a TypeError."""
     with pytest.raises(TypeError):
         prior_belief(bad)
 
 
 def test_prior_names_must_be_str():
+    """A prior keyed by an integer is a TypeError."""
     with pytest.raises(TypeError):
         prior_belief({1: 0.5})
 
 
 @pytest.mark.parametrize("bad", ["A", Var, 3, [A]])
 def test_constraint_must_be_a_formula_or_none(bad):
+    """A constraint that is a string, a class, a number or a list is a TypeError."""
     with pytest.raises(TypeError):
         prior_belief({"A": 0.5}, bad)
 
 
 @pytest.mark.parametrize("p,exc", [(1.5, ValueError), (-0.1, ValueError), (float("nan"), ValueError), (True, TypeError), ("0.5", TypeError)])
 def test_bad_prior_values_raise(p, exc):
+    """A prior above 1, below 0 or nan is a ValueError, and a bool or string prior is a TypeError."""
     with pytest.raises(exc):
         prior_belief({"A": p})
 
 
 def test_variable_limit_is_enforced_before_enumeration():
+    """More than the supported number of variables, counting constraint variables, is a ValueError raised before any enumeration, and exactly the maximum is accepted."""
     ok = {f"v{i:02d}": Fr(1, 2) for i in range(MAX_VARIABLES)}
     too_many = dict(ok, extra=Fr(1, 2))
     with pytest.raises(ValueError):
@@ -203,12 +220,14 @@ def test_variable_limit_is_enforced_before_enumeration():
 
 
 def test_priors_mapping_is_not_mutated():
+    """Building a belief does not change the priors dict it was given."""
     priors = {"B": 0.5, "A": 0.25}
     prior_belief(priors, Or(A, B))
     assert priors == {"B": 0.5, "A": 0.25}
 
 
 def test_world_values_are_hashable_keys_and_assignments_work_with_logic_evaluate():
+    """Every world satisfies the constraint under the logic package's evaluator and world values are distinct and usable as dict keys."""
     b = prior_belief({"A": Fr(1, 2), "B": Fr(1, 2)}, Implies(A, B))
     for w in b.worlds:
         assert logic.evaluate(Implies(A, B), w.assignment())
@@ -240,6 +259,7 @@ def test_weights_match_the_brute_force_oracle(priors, constraint):
 @settings(max_examples=60)
 @given(prior_maps(), formulas())
 def test_every_world_satisfies_the_constraint_and_every_model_appears(priors, constraint):
+    """For random priors and constraints, every world satisfies the constraint under an independent evaluator and the number of worlds equals the number of logic models."""
     b = prior_belief(priors, constraint)
     assert all(ref_eval(constraint, w.assignment()) for w in b.worlds)
     count = len(list(logic.models(constraint, over=b.variables)))
@@ -249,6 +269,7 @@ def test_every_world_satisfies_the_constraint_and_every_model_appears(priors, co
 @settings(max_examples=40)
 @given(prior_maps())
 def test_unconstrained_total_is_one(priors):
+    """For random priors without a constraint the total weight is exactly 1."""
     assert prior_belief(priors).total == 1
 
 

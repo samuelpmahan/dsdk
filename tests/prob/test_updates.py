@@ -24,8 +24,9 @@ def snapshot(store):
     return store.entries(), store.receipts()
 
 
-# ------------------------------------------------------------------ start_series / history
+# ==== Starting a belief series and reading its history ====
 def test_start_series_binds_a_raw_part_at_belief_0():
+    """Start series binds a raw part at belief 0."""
     store, prior, start = fresh()
     assert store.get("px.s.belief.0") is start
     assert start.composition is None and start.value == prior
@@ -34,6 +35,7 @@ def test_start_series_binds_a_raw_part_at_belief_0():
 
 
 def test_start_series_is_write_once():
+    """Start series is write once."""
     store, prior, _ = fresh()
     with pytest.raises(AddressOccupiedError):
         start_series(store, "s", prior)
@@ -41,11 +43,13 @@ def test_start_series_is_write_once():
 
 @pytest.mark.parametrize("name", ["", "a.b", "a b", "1x", "x\n", "é", "a-b"])
 def test_series_names_must_be_identifiers(name):
+    """A series name that is empty, has a dot, a space, a leading digit, a newline, a non-ASCII letter or a hyphen is a ValueError."""
     with pytest.raises(ValueError):
         start_series(PxC(), name, prior_belief({"A": 0.5}))
 
 
 def test_series_argument_types():
+    """A non-store, a non-string name, a non-belief or a non-formula evidence is a TypeError."""
     b = prior_belief({"A": 0.5})
     with pytest.raises(TypeError):
         start_series("store", "s", b)
@@ -60,6 +64,7 @@ def test_series_argument_types():
 
 
 def test_history_of_an_unstarted_series_is_missing_part():
+    """Asking for the history, the current belief, or an observation of a series that was never started raises the core missing-part error."""
     with pytest.raises(MissingPartError):
         belief_history(PxC(), "nope")
     with pytest.raises(MissingPartError):
@@ -68,8 +73,9 @@ def test_history_of_an_unstarted_series_is_missing_part():
         current_belief(PxC(), "nope")
 
 
-# ------------------------------------------------------------------ observe: addresses, values, lineage
+# ==== Each observation is a tick that leaves addresses, values and lineage ====
 def test_observe_returns_known_with_the_new_belief_part_bound_at_belief_1():
+    """Observe returns known with the new belief part bound at belief 1."""
     store, prior, start = fresh()
     j = observe(store, "s", BREEZE)
     assert j.status is Status.KNOWN
@@ -80,12 +86,14 @@ def test_observe_returns_known_with_the_new_belief_part_bound_at_belief_1():
 
 
 def test_the_headline_wumpus_update_through_the_store():
+    """Observing the breeze through the store gives a belief in which the pit at A has probability 5/9."""
     store, _, _ = fresh()
     new = observe(store, "s", BREEZE).value
     assert probability(new.value, A).value == Fr(5, 9)
 
 
 def test_evidence_is_recorded_as_its_own_part():
+    """The observed formula is stored as its own composed part at the evidence address."""
     store, _, _ = fresh()
     observe(store, "s", BREEZE)
     ev = store.get("px.s.evidence.1")
@@ -93,6 +101,7 @@ def test_evidence_is_recorded_as_its_own_part():
 
 
 def test_belief_part_composition_names_prev_and_evidence_by_identity():
+    """The new belief's composition names its inputs prev and evidence, and they are the very Part objects of the previous belief and the evidence."""
     store, _, start = fresh()
     new = observe(store, "s", BREEZE).value
     inputs = dict(new.composition.inputs)
@@ -103,6 +112,7 @@ def test_belief_part_composition_names_prev_and_evidence_by_identity():
 
 
 def test_calculation_parts_are_shared_across_updates():
+    """Every belief update uses the same calculation Part, and every evidence record uses another one shared by all updates."""
     store, _, _ = fresh()
     b1 = observe(store, "s", BREEZE).value
     b2 = observe(store, "s", Not(Var("A"))).value
@@ -113,6 +123,7 @@ def test_calculation_parts_are_shared_across_updates():
 
 
 def test_two_updates_equal_conditioning_on_the_conjunction():
+    """Two updates equal conditioning on the conjunction."""
     store, prior, _ = fresh()
     observe(store, "s", BREEZE)
     observe(store, "s", Not(A))
@@ -121,6 +132,7 @@ def test_two_updates_equal_conditioning_on_the_conjunction():
 
 
 def test_receipts_two_produced_per_update_with_the_tick_id():
+    """Each update records two PRODUCED receipts, evidence then belief, both tagged with the tick id name.observe.k."""
     store, _, _ = fresh()
     observe(store, "s", BREEZE)
     observe(store, "s", Not(A))
@@ -131,12 +143,14 @@ def test_receipts_two_produced_per_update_with_the_tick_id():
 
 
 def test_binding_order_and_no_stray_addresses():
+    """After one update the store holds exactly the starting belief, the evidence and the new belief, in that order."""
     store, _, _ = fresh()
     observe(store, "s", BREEZE)
     assert [a for a, _ in store.entries()] == ["px.s.belief.0", "px.s.evidence.1", "px.s.belief.1"]
 
 
 def test_lineage_dag_reaches_every_earlier_belief_and_every_evidence():
+    """The lineage graph of the newest belief contains every earlier belief and every piece of evidence, the shortest path is the chain of beliefs, and lineage points forward only."""
     store, _, start = fresh()
     b1 = observe(store, "s", BREEZE).value
     b2 = observe(store, "s", Not(A)).value
@@ -152,6 +166,7 @@ def test_lineage_dag_reaches_every_earlier_belief_and_every_evidence():
 
 
 def test_lineage_distinguishes_branches_of_evidence():
+    """The lineage graph's edges are labelled prev, evidence and formula, so a reader can tell the branches apart."""
     store, _, _ = fresh()
     observe(store, "s", BREEZE)
     g = lineage_graph(store.get("px.s.belief.1"))
@@ -160,6 +175,7 @@ def test_lineage_distinguishes_branches_of_evidence():
 
 
 def test_two_series_in_one_store_do_not_interfere():
+    """Two independent belief series in the same store keep their own histories and results."""
     store = PxC()
     start_series(store, "x", prior_belief({"A": 0.2, "B": 0.2}))
     start_series(store, "y", prior_belief({"A": 0.5, "B": 0.5}))
@@ -171,14 +187,16 @@ def test_two_series_in_one_store_do_not_interfere():
 
 
 def test_stored_belief_cannot_be_mutated_through_a_reference():
+    """Reading a stored belief twice gives equal values, so the store's state is not altered through the value."""
     store, prior, _ = fresh()
     first = store.get("px.s.belief.0").value
     assert first == prior
     assert store.get("px.s.belief.0").value == prior
 
 
-# ------------------------------------------------------------------ impossible evidence / unknown: the store is untouched
+# ==== Impossible or unmodelled evidence leaves the store untouched ====
 def test_impossible_evidence_is_invalid_and_leaves_no_trace():
+    """Contradictory or zero-probability evidence gives INVALID, and afterwards the store's entries and receipts are exactly what they were."""
     store, _, start = fresh()
     observe(store, "s", BREEZE)
     before = snapshot(store)
@@ -199,6 +217,7 @@ def test_evidence_contradicting_the_current_belief_is_impossible_even_if_logical
 
 
 def test_the_series_keeps_working_after_a_rejected_observation():
+    """After an INVALID observation the series accepts the next valid one at the same index, and no rejected try consumed an index."""
     store, prior, _ = fresh()
     assert observe(store, "s", And(A, Not(A))).status is Status.INVALID
     assert observe(store, "s", BREEZE).status is Status.KNOWN
@@ -206,18 +225,21 @@ def test_the_series_keeps_working_after_a_rejected_observation():
 
 
 def test_zero_prior_makes_every_observation_impossible():
+    """With prior 0 for both pits, observing the breeze is INVALID."""
     store = PxC()
     start_series(store, "z", prior_belief({"A": 0, "B": 0}))
     assert observe(store, "z", BREEZE).status is Status.INVALID
 
 
 def test_a_dead_starting_belief_is_invalid_for_everything():
+    """A series that starts from a belief of zero total weight answers INVALID to any observation."""
     store = PxC()
     start_series(store, "d", condition(prior_belief({"A": 0.5}), Const(False)))
     assert observe(store, "d", Const(True)).status is Status.INVALID
 
 
 def test_unmodelled_evidence_is_unknown_and_leaves_no_trace():
+    """Evidence mentioning a variable the belief does not model is UNKNOWN and leaves the store untouched."""
     store, _, _ = fresh()
     before = snapshot(store)
     j = observe(store, "s", And(A, Var("Z")))
@@ -225,8 +247,9 @@ def test_unmodelled_evidence_is_unknown_and_leaves_no_trace():
     assert snapshot(store) == before
 
 
-# ------------------------------------------------------------------ atomicity and tick interaction
+# ==== Updates are atomic and respect open ticks ====
 def test_a_failing_compose_rolls_the_whole_update_back():
+    """If an address needed by the update is already taken, the tick rolls back: no new belief is bound, no new entries or receipts exist, and the exception propagates."""
     store, _, _ = fresh()
     store.set("px.s.evidence.1", Part("squatter"))
     before = snapshot(store)
@@ -238,6 +261,7 @@ def test_a_failing_compose_rolls_the_whole_update_back():
 
 
 def test_observe_inside_an_open_tick_raises_tick_in_progress():
+    """Observing while another tick is open raises the core tick-in-progress error and binds nothing."""
     store, _, _ = fresh()
     with store.tick("outer"):
         with pytest.raises(TickInProgressError):
@@ -246,6 +270,7 @@ def test_observe_inside_an_open_tick_raises_tick_in_progress():
 
 
 def test_long_series_keeps_indices_dense_and_equals_one_big_condition():
+    """Four successive observations give belief indices 0 to 4 with no gaps, equal conditioning once on the conjunction of all four, and the first belief reaches the last in the lineage graph."""
     store, prior, _ = fresh(priors={"A": Fr(1, 2), "B": Fr(1, 2), "C": Fr(1, 2)})
     evs = [Or(A, B), Not(A), Or(Var("C"), A), Or(Var("C"), Not(B))]
     for e in evs:

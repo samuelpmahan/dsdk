@@ -10,6 +10,7 @@ from hypothesis import strategies as st
 from dsdk.prob import to_prob, to_weight
 
 
+# ==== Exact conversion of probabilities and weights to Fractions ====
 @pytest.mark.parametrize("x,expected", [(0, Fraction(0)), (1, Fraction(1)), (Fraction(1, 3), Fraction(1, 3)), (0.5, Fraction(1, 2)), (0.25, Fraction(1, 4))])
 def test_exact_inputs_convert_to_themselves(x, expected):
     """Ints, Fractions and floats that are binary-exact convert to the obvious Fraction, and the result is a real Fraction."""
@@ -41,6 +42,7 @@ def test_bool_is_rejected_even_though_it_is_an_int(bad):
 
 @pytest.mark.parametrize("bad", ["0.5", None, Decimal("0.5"), 1 + 0j, [0.5], b"1"])
 def test_other_types_are_a_type_error(bad):
+    """Strings, Decimals, None, complex numbers, lists and bytes are not numbers for the purposes of probabilities: each is a TypeError."""
     for fn in (to_prob, to_weight):
         with pytest.raises(TypeError):
             fn(bad)
@@ -48,6 +50,7 @@ def test_other_types_are_a_type_error(bad):
 
 @pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
 def test_non_finite_floats_are_a_value_error(bad):
+    """nan, infinity and negative infinity are rejected with a ValueError for both probabilities and weights."""
     for fn in (to_prob, to_weight):
         with pytest.raises(ValueError):
             fn(bad)
@@ -55,6 +58,7 @@ def test_non_finite_floats_are_a_value_error(bad):
 
 @pytest.mark.parametrize("bad", [-1, -0.001, Fraction(-1, 2)])
 def test_negative_values_are_a_value_error_for_both(bad):
+    """Negative numbers are rejected with a ValueError by both the probability and the weight converter."""
     for fn in (to_prob, to_weight):
         with pytest.raises(ValueError):
             fn(bad)
@@ -69,10 +73,12 @@ def test_to_prob_rejects_values_above_one_but_to_weight_accepts_them(big):
 
 
 def test_zero_and_one_are_legal_probabilities():
+    """The boundary values 0 and 1, as ints or floats, are legal probabilities."""
     assert to_prob(0) == 0 and to_prob(1) == 1 and to_prob(1.0) == 1 and to_prob(0.0) == 0
 
 
 def test_negative_zero_is_zero():
+    """The float -0.0 converts to the exact fraction 0."""
     assert to_prob(-0.0) == 0
 
 
@@ -92,17 +98,20 @@ def test_type_error_wins_over_value_error():
 
 @given(st.fractions(min_value=0, max_value=1, max_denominator=1000))
 def test_fractions_in_range_round_trip(fr):
+    """Any exact fraction between 0 and 1 converts to itself."""
     assert to_prob(fr) == fr and to_weight(fr) == fr
 
 
 @given(st.floats(min_value=0, max_value=1, allow_nan=False))
 def test_float_conversion_is_the_repr_fraction(x):
+    """Every float between 0 and 1 converts to the fraction written by its shortest decimal representation, and stays within [0, 1]."""
     assert to_prob(x) == Fraction(repr(x))
     assert 0 <= to_prob(x) <= 1
 
 
 @given(st.integers(min_value=-10, max_value=10))
 def test_int_range_rule(n):
+    """Integers below 0 are rejected by both converters; 0 and 1 are accepted by both; integers above 1 are accepted as weights but rejected as probabilities."""
     if n < 0:
         with pytest.raises(ValueError):
             to_weight(n)

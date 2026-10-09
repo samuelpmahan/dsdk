@@ -23,9 +23,26 @@ def to_weight(x: object, name: str = "weight") -> Fraction:
 
     ``TypeError`` for bool and unsupported types; ``ValueError`` for nan, inf and negative values.
     """
-    raise NotImplementedError
+    if isinstance(x, bool):
+        raise TypeError(f"{name} must be a number, not bool: {x!r}")
+    if isinstance(x, Fraction):
+        value = x
+    elif isinstance(x, int):
+        value = Fraction(x)
+    elif isinstance(x, float):
+        if not math.isfinite(x):
+            raise ValueError(f"{name} must be finite, got {x!r}")
+        value = Fraction(repr(x))
+    else:
+        raise TypeError(f"{name} must be an int, Fraction or float, not {type(x).__name__}")
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative, got {x!r}")
+    return value
 
 
 def to_prob(x: object, name: str = "probability") -> Fraction:
     """Like :func:`to_weight` but the value must also be <= 1 (``ValueError`` otherwise). ``0`` and ``1`` are legal."""
-    raise NotImplementedError
+    value = to_weight(x, name)
+    if value > 1:
+        raise ValueError(f"{name} must be <= 1, got {x!r}")
+    return value

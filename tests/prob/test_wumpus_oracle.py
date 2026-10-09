@@ -61,8 +61,9 @@ def kb_belief(p):
     return prior_belief({c: p for c in pit_cells}, constraint)
 
 
-# ------------------------------------------------------------------ the breeze experiment
+# ==== The Wumpus breeze experiment reproduces 4/9, 4/9, 1/9 and 55.56% to 66.67% ====
 def test_headline_posterior_is_4_9_4_9_1_9():
+    """With prior 0.2 and a breeze, the posterior is A-only 4/9, B-only 4/9, both 1/9 and neither 0, summing to 1."""
     prior, post = posterior_for(0.2)
     assert labelled(post) == {"Neither": 0, "A only": Fr(4, 9), "B only": Fr(4, 9), "Both": Fr(1, 9)}
     assert sum(labelled(post).values()) == 1
@@ -75,6 +76,7 @@ def test_prior_hypotheses_are_the_four_independent_cases():
 
 
 def test_marginal_at_A_moves_from_55_56_to_66_67_percent_when_prior_goes_to_half():
+    """P(pit at A | breeze) is exactly 5/9 (55.56%) at prior 0.2 and 2/3 (66.67%) at prior 0.5, so it rises with the prior."""
     _, low = posterior_for(0.2)
     _, high = posterior_for(0.5)
     pa_low, pa_high = probability(low, A).value, probability(high, A).value
@@ -84,6 +86,7 @@ def test_marginal_at_A_moves_from_55_56_to_66_67_percent_when_prior_goes_to_half
 
 
 def test_at_prior_half_all_three_possible_cases_are_equally_likely():
+    """At prior 0.5 the three cases that survive the breeze each have posterior 1/3."""
     _, post = posterior_for(0.5)
     assert labelled(post) == {"Neither": 0, "A only": Fr(1, 3), "B only": Fr(1, 3), "Both": Fr(1, 3)}
 
@@ -102,9 +105,10 @@ def test_posterior_probability_of_A_is_increasing_in_the_prior():
     assert values == sorted(values) and len(set(values)) == len(values)
 
 
-# ------------------------------------------------------------------ against the numbers produced by the JS code
+# ==== Agreement with the numbers produced by the JavaScript oracle ====
 @pytest.mark.parametrize("case", ORACLE["cases"], ids=lambda c: str(c["prior"]))
 def test_every_js_oracle_case_agrees_exactly_and_in_floats(case):
+    """For each prior in the fixture generated from the JavaScript priors.js, the prior weights, posterior weights and P(A) agree with the JavaScript floats to 1e-12, and the float prior converts to the exact fraction in the fixture."""
     p = Fraction(case["prior_exact"])
     assert float(p) == case["prior"]
     prior, post = posterior_for(case["prior"])  # the float prior goes through the repr rule
@@ -117,6 +121,7 @@ def test_every_js_oracle_case_agrees_exactly_and_in_floats(case):
 
 
 def test_js_fixture_has_the_headline_values():
+    """The JavaScript fixture itself holds 0.5555555555555556 and 0.6666666666666666 for the two headline priors."""
     by_prior = {c["prior"]: c for c in ORACLE["cases"]}
     assert by_prior[0.2]["js_probability_A"] == pytest.approx(0.5555555555555556)
     assert by_prior[0.5]["js_probability_A"] == pytest.approx(0.6666666666666666)
@@ -132,6 +137,7 @@ def test_prior_zero_js_throws_and_dsdk_answers_invalid():
 
 
 def test_prior_one_means_both_pits_for_certain():
+    """With prior 1 the posterior puts all weight on both pits."""
     prior = prior_belief({"A": 1, "B": 1})
     post = normalise(condition(prior, BREEZE)).value
     assert labelled(post) == {"Neither": 0, "A only": 0, "B only": 0, "Both": 1}
@@ -152,8 +158,9 @@ def test_live_parity_with_the_js_oracle_for_priors_the_fixture_never_saw():
         assert got == pytest.approx([js_weights[0], js_weights[2], js_weights[1], js_weights[3]], abs=1e-12)
 
 
-# ------------------------------------------------------------------ the three models of fixtures/logic/wumpus_kb.json
+# ==== Weighting the three models of the Wumpus knowledge base ====
 def test_kb_models_are_exactly_the_fixtures_three_models_in_order():
+    """Weighting the Wumpus knowledge base gives exactly its three models, in the fixture's order."""
     belief = kb_belief(0.2)
     assert len(belief.worlds) == KB["model_count"] == 3
     assert [w.assignment() for w in belief.worlds] == KB["models"]
@@ -170,6 +177,7 @@ def test_kb_model_weights_at_prior_one_fifth_are_4_9_4_9_1_9():
 
 
 def test_kb_posterior_at_prior_half_is_uniform_over_the_three_models():
+    """At prior 0.5 the three models of the knowledge base each have posterior 1/3."""
     post = normalise(kb_belief(0.5)).value
     assert [w.weight for w in post.worlds] == [Fr(1, 3)] * 3
 
@@ -200,6 +208,7 @@ def test_kb_probabilities_agree_with_logical_entailment():
 
 
 def test_kb_cells_that_are_not_entailed_either_way_are_strictly_uncertain():
+    """Cells P22 and P31 have probability strictly between 0 and 1 and the logic package confirms the knowledge base entails neither them nor their negations."""
     belief = kb_belief(0.2)
     for cell in ("P22", "P31"):
         assert 0 < probability(belief, Var(cell)).value < 1

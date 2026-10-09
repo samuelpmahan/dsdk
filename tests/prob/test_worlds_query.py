@@ -28,14 +28,16 @@ def known(j):
     return j.value
 
 
-# ------------------------------------------------------------------ probability: explainable examples
+# ==== Exact probabilities and conditionals on worked examples ====
 def test_marginal_of_independent_prior_is_the_prior():
+    """Under an independent prior the probability of A is its prior 1/5, of A and B is 1/25 and of A or B is 9/25."""
     assert known(probability(b2, A)) == Fr(1, 5)
     assert known(probability(b2, And(A, B))) == Fr(1, 25)
     assert known(probability(b2, Or(A, B))) == Fr(9, 25)
 
 
 def test_known_values_are_exact_fractions_including_zero_and_one():
+    """Probabilities 0 and 1 are KNOWN Fraction values, not failures."""
     zero, one = probability(b2, Const(False)), probability(b2, Const(True))
     assert zero.status is Status.KNOWN and zero.value == 0 and isinstance(zero.value, Fraction)
     assert one.status is Status.KNOWN and one.value == 1
@@ -55,6 +57,7 @@ def test_bayes_theorem_in_both_directions():
 
 
 def test_law_of_total_probability():
+    """P(q) equals P(q|B)P(B) + P(q|not B)P(not B) for a correlated belief."""
     b = prior_belief({"A": Fr(1, 3), "B": Fr(1, 4), "C": Fr(2, 3)}, Implies(A, Or(B, C)))
     q = Or(A, C)
     split = known(probability(b, q, B)) * known(probability(b, B)) + known(probability(b, q, Not(B))) * known(probability(b, Not(B)))
@@ -62,6 +65,7 @@ def test_law_of_total_probability():
 
 
 def test_certain_evidence_changes_nothing_and_given_equal_to_query_is_one():
+    """Conditioning on a true constant changes nothing, P(A|A) is 1 and P(not A|A) is 0."""
     b = prior_belief({"A": Fr(1, 3), "B": Fr(1, 2)})
     assert known(probability(b, A, Const(True))) == known(probability(b, A))
     assert known(probability(b, A, A)) == 1
@@ -76,7 +80,7 @@ def test_entailment_means_conditional_probability_one_when_evidence_is_possible(
     assert known(probability(b, Or(A, B), evidence)) == 1
 
 
-# ------------------------------------------------------------------ probability: impossible evidence and UNKNOWN
+# ==== Impossible evidence is INVALID and unmodelled variables are UNKNOWN ====
 IMPOSSIBLE = [And(A, Not(A)), Const(False), And(B, Not(B))]
 
 
@@ -101,6 +105,7 @@ def test_evidence_that_the_prior_makes_impossible_is_invalid():
 
 
 def test_zero_total_belief_makes_every_unconditional_question_invalid():
+    """A belief with zero total weight (contradictory constraint, or evidence of zero probability) answers INVALID with reason mentioning zero total weight."""
     empty = prior_belief({"A": Fr(1, 2)}, And(A, Not(A)))
     assert empty.total == 0
     j = probability(empty, A)
@@ -111,6 +116,7 @@ def test_zero_total_belief_makes_every_unconditional_question_invalid():
 
 
 def test_conditioning_then_asking_on_impossible_evidence_is_invalid():
+    """After conditioning on a contradiction every question, the marginals and the normalisation are INVALID."""
     dead = condition(b2, And(A, Not(A)))
     assert dead.total == 0
     assert probability(dead, A).status is Status.INVALID
@@ -119,6 +125,7 @@ def test_conditioning_then_asking_on_impossible_evidence_is_invalid():
 
 
 def test_unmodelled_variable_is_unknown_not_invalid_not_zero():
+    """A query over variables the belief does not model is UNKNOWN with the reason listing them sorted, in both the query and the evidence position."""
     j = probability(b2, And(Var("Z"), Var("Y")))
     assert j.status is Status.UNKNOWN and j.value is None
     assert "unmodelled variables: Y, Z" == j.reason
@@ -127,25 +134,29 @@ def test_unmodelled_variable_is_unknown_not_invalid_not_zero():
 
 
 def test_unmodelled_check_comes_before_the_zero_denominator_check():
+    """The unmodelled-variable check runs before the zero-weight check, so a dead belief asked about an unknown variable is UNKNOWN."""
     empty = prior_belief({"A": Fr(1, 2)}, And(A, Not(A)))
     assert probability(empty, Var("Z")).status is Status.UNKNOWN
 
 
 @pytest.mark.parametrize("args", [("A",), (b2, "A"), (b2, A, "B"), (None, A), (b2, 1)])
 def test_probability_argument_types(args):
+    """A non-belief, a non-formula query, a non-formula evidence or a number in place of a belief are a TypeError."""
     with pytest.raises(TypeError):
         probability(*args)
 
 
 def test_probability_never_mutates_or_depends_on_call_order():
+    """Asking the same question twice gives equal answers and leaves the belief unchanged."""
     before = b2
     first = probability(b2, A, Or(A, B))
     again = probability(b2, A, Or(A, B))
     assert first == again and b2 == before
 
 
-# ------------------------------------------------------------------ reweight / condition
+# ==== Reweighting and conditioning a belief ====
 def test_reweight_calls_likelihood_once_per_world_in_order_with_fresh_dicts():
+    """Reweighting calls the likelihood once per world in world order with a fresh dict each time, multiplies each weight by it, and a function that tampers with its argument cannot alter the belief."""
     seen = []
 
     def lik(a):
@@ -161,6 +172,7 @@ def test_reweight_calls_likelihood_once_per_world_in_order_with_fresh_dicts():
 
 
 def test_reweight_accepts_ints_floats_fractions_and_keeps_zero_weight_worlds():
+    """Likelihoods may be ints, floats or Fractions, and worlds whose weight becomes 0 stay in the belief."""
     out = reweight(b2, lambda a: 0 if a["A"] else 0.5)
     assert len(out.worlds) == len(b2.worlds)
     assert [w.weight for w in out.worlds] == [Fr(16, 25) / 2, Fr(4, 25) / 2, 0, 0]
@@ -168,11 +180,13 @@ def test_reweight_accepts_ints_floats_fractions_and_keeps_zero_weight_worlds():
 
 @pytest.mark.parametrize("bad,exc", [(-1, ValueError), (float("nan"), ValueError), ("x", TypeError), (None, TypeError), (True, TypeError)])
 def test_reweight_rejects_bad_likelihood_values(bad, exc):
+    """A likelihood that returns a negative, nan, string, None or bool is rejected."""
     with pytest.raises(exc):
         reweight(b2, lambda a: bad)
 
 
 def test_reweight_argument_types_and_input_not_changed():
+    """A non-belief or non-callable is a TypeError, and the input belief is unchanged afterwards."""
     with pytest.raises(TypeError):
         reweight("belief", lambda a: 1)
     with pytest.raises(TypeError):
@@ -183,6 +197,7 @@ def test_reweight_argument_types_and_input_not_changed():
 
 
 def test_condition_keeps_only_matching_worlds_and_total_becomes_the_evidence_mass():
+    """Conditioning on A-or-B keeps the three matching worlds with their weights 4/25, 4/25 and 1/25, keeps the excluded world with weight 0, and makes the total 9/25."""
     c = condition(b2, Or(A, B))
     assert [(w.values, w.weight) for w in c.worlds if w.weight] == [((("A", False), ("B", True)), Fr(4, 25)), ((("A", True), ("B", False)), Fr(4, 25)), ((("A", True), ("B", True)), Fr(1, 25))]
     assert len(c.worlds) == 4, "the excluded world stays, with weight 0"
@@ -190,6 +205,7 @@ def test_condition_keeps_only_matching_worlds_and_total_becomes_the_evidence_mas
 
 
 def test_condition_is_idempotent_commutative_and_equals_conditioning_on_the_conjunction():
+    """Conditioning twice on the same evidence changes nothing more, the order of two pieces of evidence does not matter, and both equal conditioning once on their conjunction."""
     e1, e2 = Or(A, B), Not(And(A, B))
     once = condition(b2, e1)
     assert condition(once, e1) == once
@@ -200,6 +216,7 @@ def test_condition_is_idempotent_commutative_and_equals_conditioning_on_the_conj
 
 
 def test_condition_on_true_is_identity_and_on_false_zeroes_everything():
+    """Conditioning on true returns the same belief, and on false gives total 0 while keeping every world."""
     assert condition(b2, Const(True)) == b2
     dead = condition(b2, Const(False))
     assert dead.total == 0 and all(w.weight == 0 for w in dead.worlds) and len(dead.worlds) == len(b2.worlds)
@@ -212,6 +229,7 @@ def test_condition_does_not_normalise():
 
 
 def test_condition_errors():
+    """Conditioning on an unmodelled variable raises an error naming it, and wrong argument types are a TypeError."""
     with pytest.raises(UnmodelledVariableError) as info:
         condition(b2, Var("Z"))
     assert info.value.names == ("Z",)
@@ -222,12 +240,14 @@ def test_condition_errors():
 
 
 def test_condition_on_impossible_evidence_returns_a_dead_belief_not_an_exception():
+    """Conditioning on a contradiction returns a belief with total 0 instead of raising."""
     dead = condition(b2, And(A, Not(A)))
     assert isinstance(dead, Belief) and dead.total == 0
 
 
-# ------------------------------------------------------------------ marginals / normalise
+# ==== Marginals and normalisation ====
 def test_marginals_table_and_order():
+    """After conditioning on a breeze the marginals are returned in variable order with both pit probabilities equal to 5/9."""
     j = marginals(condition(b2, Or(A, B)))
     assert j.status is Status.KNOWN
     assert list(j.value) == ["A", "B"]
@@ -235,15 +255,18 @@ def test_marginals_table_and_order():
 
 
 def test_marginals_of_belief_over_no_variables():
+    """A belief over no variables has an empty marginal table."""
     assert known(marginals(prior_belief({}))) == {}
 
 
 def test_marginals_rejects_non_belief():
+    """Marginals of something that is not a belief is a TypeError."""
     with pytest.raises(TypeError):
         marginals([1])
 
 
 def test_normalise_sums_to_one_keeps_order_and_ratios():
+    """Normalising the breeze posterior gives weights 0, 4/9, 4/9, 1/9 summing to 1 in the same world order, and normalising again changes nothing."""
     c = condition(b2, Or(A, B))
     n = known(normalise(c))
     assert n.total == 1
@@ -253,16 +276,18 @@ def test_normalise_sums_to_one_keeps_order_and_ratios():
 
 
 def test_normalise_invalid_for_zero_total_and_rejects_non_belief():
+    """Normalising a zero-weight belief is INVALID, and a non-belief is a TypeError."""
     j = normalise(condition(b2, Const(False)))
     assert j.status is Status.INVALID and "zero total weight" in j.reason
     with pytest.raises(TypeError):
         normalise(3)
 
 
-# ------------------------------------------------------------------ properties against the independent oracle
+# ==== Properties checked against an independent brute-force oracle ====
 @settings(max_examples=60)
 @given(prior_maps(), formulas(), formulas(), formulas())
 def test_probability_matches_the_brute_force_oracle(priors, constraint, query, given_):
+    """For random priors, constraints, queries and evidence, probability equals the independent itertools computation exactly, and is INVALID exactly when that computation has a zero denominator."""
     vs = ref_vars(constraint) | ref_vars(query) | ref_vars(given_)
     full = dict(priors)
     for v in vs - set(full):
@@ -280,6 +305,7 @@ def test_probability_matches_the_brute_force_oracle(priors, constraint, query, g
 @settings(max_examples=60)
 @given(prior_maps(), formulas(), formulas())
 def test_condition_then_probability_equals_given_form(priors, e, q):
+    """Asking P(q | e) directly gives the same answer as conditioning on e and then asking P(q)."""
     full = dict(priors)
     for v in (ref_vars(e) | ref_vars(q)) - set(full):
         full[v] = Fr(1, 3)
@@ -294,6 +320,7 @@ def test_condition_then_probability_equals_given_form(priors, e, q):
 @settings(max_examples=40)
 @given(prior_maps(), formulas())
 def test_complement_rule_and_additivity(priors, q):
+    """For random queries P(q) + P(not q) equals exactly 1."""
     full = dict(priors)
     for v in ref_vars(q) - set(full):
         full[v] = Fr(1, 2)
