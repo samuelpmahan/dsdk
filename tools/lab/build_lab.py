@@ -1,11 +1,12 @@
 """Assemble the dsdk Lab page (lab/dist/dsdk-lab.html) from live repo state.
 
-Inlines the parity-verified JS logic engine, the agent ledger, the Haiku
+Inlines the parity-verified JS logic engine, the agent ledger (first-try rates and the per-round series are computed by dsdk.worlds), the Haiku
 failure log, A1 evidence numbers, and Lost Lands counts decoded from the
 jukebox derived store. Run: uv run python tools/lab/build_lab.py
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import gzip
 import json
@@ -56,6 +57,29 @@ def ledger() -> list[dict]:
     return sorted(rows, key=lambda r: r["ts"])
 
 
+def build_stats() -> dict:
+    """First-try tiles and the per-round series come from dsdk itself (dsdk.worlds, which calls dsdk.prob.exact_interval), not from
+    the page's JavaScript. If the worlds functions are still stubs the page says so instead of showing page-computed numbers as if
+    they were dsdk's."""
+    from dsdk.core import Status
+    from dsdk.worlds import first_try_summary, load_ledger, round_throughput
+
+    out: dict = {"source": "dsdk.worlds.first_try_summary, which calls dsdk.prob.exact_interval (Clopper-Pearson, 95%)",
+                 "first_try": {}, "rounds": []}
+    entries = load_ledger()
+    try:
+        for model in ("haiku", "sonnet"):
+            j = first_try_summary(entries, model)
+            row = {"status": j.status.value, "reason": j.reason}
+            if j.status is Status.KNOWN:
+                row.update(dataclasses.asdict(j.value))
+            out["first_try"][model] = row
+        out["rounds"] = [dataclasses.asdict(r) for r in round_throughput(entries)]
+    except NotImplementedError:
+        out["pending"] = "dsdk.worlds first_try_summary and round_throughput are not implemented yet"
+    return out
+
+
 def limits() -> list[dict]:
     out = []
     for line in (ROOT / "ops/haiku-limits.md").read_text().splitlines():
@@ -94,7 +118,7 @@ def main() -> None:
     data = {
         "built_at": dt.datetime.now(dt.UTC).strftime("%Y-%m-%d %H:%M UTC"),
         "git_sha": sh("git", "rev-parse", "HEAD").decode().strip(),
-        "ledger": ledger(), "limits": limits(), "a1": a1(), "lostlands": lostlands(),
+        "ledger": ledger(), "build_stats": build_stats(), "limits": limits(), "a1": a1(), "lostlands": lostlands(),
         "claims": json.loads((ROOT / "lab/data/claims.json").read_text()),
         "stack": json.loads((ROOT / "lab/data/stack.json").read_text()),
     }

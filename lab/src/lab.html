@@ -211,12 +211,13 @@ footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;fl
       <p class="lede">dsdk studies the agents building it. Each dot is one agent attempt from the ledger. Sonnet writes contracts and audits, and Haiku implements against them with two tries per card.</p>
       <div class="tiles" id="build-tiles"></div>
       <div class="chart" id="build-chart"></div>
+      <div class="chart" id="round-chart" aria-live="polite"></div>
       <div><h3 style="font-size:20px;margin-bottom:6px">Where Haiku slipped</h3><div class="tablewrap"><table id="limits"><thead><tr><th>Task</th><th>What happened</th><th>What changed</th></tr></thead><tbody></tbody></table></div></div>
     </div>
     <details class="how">
       <summary>How do we know?</summary>
       <div class="body">
-        <p style="margin:0">Every number comes from <code>ops/ledger.jsonl</code>, which is appended after the planner re-runs each claimed result. Intervals are exact (Clopper-Pearson) 95% intervals computed in this page, which cover the true rate at least 95% of the time. An earlier version showed Wilson intervals. The probability-proof audit found those really cover only about 84% of the time near 0% or 100%, which is exactly where Haiku's rate sits. An exact interval is being added to <code>dsdk.prob</code> so the two can be checked against each other.</p>
+        <p style="margin:0">Every number comes from <code>ops/ledger.jsonl</code>, which is appended after the planner re-runs each claimed result. The first-try rates and the per-round bars are computed by dsdk itself: <code>dsdk.worlds.first_try_summary</code> reads the ledger and calls <code>dsdk.prob.exact_interval</code>, an exact (Clopper-Pearson) 95% interval whose coverage is at least 95% for every sample size. This page recomputes each interval in its own JavaScript and shows "page recomputes: agree" or "DISAGREE" under each tile. An earlier version showed Wilson intervals; the probability-proof audit found those really cover only about 84% of the time near 0% or 100%, which is where Haiku's rate sits.</p>
         <dl class="ev" id="ev-build"></dl>
       </div>
     </details>
@@ -420,10 +421,22 @@ function renderBuild(){
   const rows=LAB.ledger, by={};
   for (const r of rows){ (by[r.model] ||= []).push(r); }
   const tiles=$('#build-tiles');
+  const BS=LAB.build_stats||{first_try:{},rounds:[]};
   for (const m of ['haiku','sonnet']){
     const rs=by[m]||[], first=rs.filter(r=>r.attempt===1), ok=first.filter(r=>r.outcome==='pass').length;
-    const [lo,hi]=exact(ok, first.length);
-    tiles.append(el('div',{class:'tile'}, el('span',{class:'k',text:`${m} first try`}), el('span',{class:'v',text:first.length?Math.round(100*ok/first.length)+'%':'–'}), el('span',{class:'s',text:`${ok} of ${first.length} · exact 95% interval ${Math.round(lo*100)}–${Math.round(hi*100)}%`})));
+    const [jlo,jhi]=exact(ok, first.length);            // the page's own independent recomputation, used ONLY as a cross-check
+    const d=BS.first_try[m];                              // the number shown comes from dsdk.worlds -> dsdk.prob.exact_interval
+    let big='–', sub, check;
+    if (d && d.status==='known'){
+      big=Math.round(100*d.rate)+'%';
+      sub=`${d.passes} of ${d.attempts} · exact 95% interval ${Math.round(d.low*100)}–${Math.round(d.high*100)}% (computed by dsdk)`;
+      const agree=d.passes===ok && d.attempts===first.length && Math.abs(d.low-jlo)<1e-9 && Math.abs(d.high-jhi)<1e-9;
+      check=el('span',{class:'s','data-agree':String(agree)},`page recomputes: ${agree?'agree':'DISAGREE'}`);
+    } else {
+      sub=d?d.reason:(BS.pending||'dsdk has no number for this yet');
+      check=el('span',{class:'s','data-agree':'pending'},`waiting for dsdk · page would show ${ok} of ${first.length}`);
+    }
+    tiles.append(el('div',{class:'tile'}, el('span',{class:'k',text:`${m} first try`}), el('span',{class:'v',text:big}), el('span',{class:'s',text:sub}), check));
   }
   const wall=rows.reduce((s,r)=>s+(r.wall_s||0),0);
   tiles.append(el('div',{class:'tile'}, el('span',{class:'k',text:'attempts logged'}), el('span',{class:'v',text:String(rows.length)}), el('span',{class:'s',text:`${Math.round(wall/60)} agent-minutes of work`})));
@@ -438,6 +451,15 @@ function renderBuild(){
   const hrs=((t1-t0)/3600).toFixed(1);
   svg+=`<text x="${pad}" y="${H-8}" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="11">first attempt</text><text x="${W-10}" y="${H-8}" text-anchor="end" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="11">${hrs} h later · dot size = wall time · green pass, amber partial</text></svg>`;
   $('#build-chart').innerHTML=svg;
+  const R=BS.rounds||[], rc=$('#round-chart');
+  if (!R.length) rc.textContent=BS.pending?('Per-round throughput: '+BS.pending+'.'):'No rounds recorded.';
+  else {
+    const BW=900, BH=170, bx=50, bw=Math.min(60,(BW-bx-20)/R.length-10), top=Math.max(...R.map(r=>r.attempts)), sy=v=>BH-30-(BH-60)*v/top;
+    let b=`<svg viewBox="0 0 ${BW} ${BH}" role="img" aria-label="Attempts and passes in each dispatch round">`;
+    R.forEach((r,i)=>{ const x=bx+i*(bw+10); b+=`<rect x="${x}" y="${sy(r.attempts).toFixed(1)}" width="${bw}" height="${(BH-30-sy(r.attempts)).toFixed(1)}" fill="var(--rule)"><title>round ${r.round}: ${r.attempts} attempts, ${r.passes} passed, ${r.tests_green} tests turned green, ${Math.round(r.agent_seconds/60)} agent-minutes</title></rect><rect x="${x}" y="${sy(r.passes).toFixed(1)}" width="${bw}" height="${(BH-30-sy(r.passes)).toFixed(1)}" fill="var(--safe)" fill-opacity=".85"/><text x="${x+bw/2}" y="${BH-14}" text-anchor="middle" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="11">${r.round}</text>`; });
+    b+=`<text x="4" y="14" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="11">per dispatch round (computed by dsdk.worlds): grey = attempts, green = passed</text></svg>`;
+    rc.innerHTML=b;
+  }
   const tb=$('#limits tbody'); for (const l of LAB.limits) tb.append(el('tr',{},el('td',{text:l.task}),el('td',{text:l.what}),el('td',{text:l.fix})));
   fillEv('#ev-build',[['Source','ops/ledger.jsonl ('+rows.length+' rows)'],['Failure log','ops/haiku-limits.md ('+LAB.limits.length+' entries)'],['Verification','each Haiku pass is re-run by the planner before it is logged'],['Commit',LAB.git_sha]]);
 }

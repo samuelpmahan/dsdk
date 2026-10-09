@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Iterable
 
 from dsdk.core import Judgment, Status
+from dsdk.prob import exact_interval  # noqa: F401  (used by first_try_summary)
 
 from .lostlands import WorldError
 
@@ -204,3 +205,76 @@ def first_try_rate(entries: Iterable[LedgerEntry], model: str, *, min_n: int = 1
     if seen < min_n:
         return Judgment(Status.UNKNOWN, None, f"only {seen} attempt-1 entries for {model!r}, need {min_n}")
     return Judgment(Status.KNOWN, passes / seen, f"{passes}/{seen} attempt-1 runs passed")
+
+
+# ==== first-try summary with an exact interval (dsdk.prob does the interval) and the per-round series ====
+
+
+@dataclass(frozen=True)
+class FirstTry:
+    """First-try pass count with its exact confidence interval.
+
+    ``passes`` first attempts passed out of ``attempts``; ``rate = passes / attempts`` (float); ``low`` / ``high`` are the ends of the
+    exact (Clopper-Pearson) interval at ``confidence`` (a float strictly between 0 and 1), taken UNCHANGED from
+    :func:`dsdk.prob.exact_interval`.
+    """
+
+    passes: int
+    attempts: int
+    rate: float
+    low: float
+    high: float
+    confidence: float
+
+
+def first_try_summary(entries: Iterable[LedgerEntry], model: str, *, confidence: object = 0.95) -> Judgment:
+    """How often ``model`` passes on its FIRST attempt, with an exact interval from ``dsdk.prob``. Decision table:
+
+    1. ``model`` not a non-empty ``str``: ``Judgment(Status.INVALID, None, "model must be a non-empty string")``.
+       ``confidence`` not an ``int``/``float`` (``bool`` excluded), or not strictly between 0 and 1 (NaN included):
+       ``Judgment(Status.INVALID, None, "confidence must be a number strictly between 0 and 1")``. The model is checked first.
+       Never raises.
+    2. No ``attempt == 1`` entry for ``model``: ``Judgment(Status.NOT_OBSERVED, None, f"no attempt-1 entries for {model!r}")``.
+    3. Otherwise ``Judgment(Status.KNOWN, FirstTry(passes, attempts, passes / attempts, low, high, float(confidence)), reason)`` where
+       ``passes`` counts ``outcome == "pass"`` among the attempt-1 entries, ``attempts`` counts those entries, and
+       ``(low, high) = dsdk.prob.exact_interval(passes, attempts, confidence)``. This module does NO interval arithmetic of its own:
+       it CALLS ``exact_interval`` and uses its numbers as they are. The reason is exactly
+       ``f"{passes}/{attempts} attempt-1 runs passed; exact {pct}% interval {low:.3f} to {high:.3f}"`` with ``pct = f"{confidence * 100:g}"``
+       (so ``0.95`` prints ``95``).
+
+    There is no UNKNOWN case: one attempt gives a wide interval rather than a refusal, because the interval IS the statement of how
+    little is known. ``entries`` may be a one-shot iterator (consumed once).
+    """
+    raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class RoundStats:
+    """What happened in one dispatch round (the ledger's ``round`` field).
+
+    ``attempts`` / ``passes`` count every entry of the round and those with outcome ``pass``; ``first_try_attempts`` /
+    ``first_try_passes`` count only ``attempt == 1`` entries. ``agent_seconds`` is the sum of ``wall_s``. ``tests_green`` is the sum of
+    ``tests_passed`` over entries whose outcome is ``pass`` and whose ``tests_passed`` is not ``None``. ``started`` / ``finished`` are the
+    smallest and largest ``ts``. ``models`` is the sorted tuple of distinct model names.
+    """
+
+    round: int
+    attempts: int
+    passes: int
+    first_try_attempts: int
+    first_try_passes: int
+    agent_seconds: float
+    tests_green: int
+    started: int
+    finished: int
+    models: tuple[str, ...]
+
+
+def round_throughput(entries: Iterable[LedgerEntry]) -> tuple[RoundStats, ...]:
+    """One :class:`RoundStats` per round, in ASCENDING round number, for the Lab's throughput chart.
+
+    Entries whose ``round`` is ``None`` (work that was not part of a dispatch round, such as a contract written by a manager) are
+    left out. An empty input, or one with no round numbers, gives ``()``. Rounds with no entries do not appear (gaps stay gaps).
+    ``entries`` may be a one-shot iterator.
+    """
+    raise NotImplementedError
