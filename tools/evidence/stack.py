@@ -38,6 +38,30 @@ def calls() -> dict[str, dict[str, set[str]]]:
                         src = ".".join(a.name.split(".")[:2])
                         if a.name.startswith("dsdk.") and src != p:
                             alias[(a.asname or a.name).split(".")[-1]] = src
+            # Objects whose type comes from an earlier package: parameters annotated with an imported class,
+            # and `with <such object>.<method>(...) as name` targets. Method calls on them count as uses of that
+            # package, named Class.method. Nothing is guessed from method names alone.
+            typed: dict[str, tuple[str, str]] = {}
+            for fn in ast.walk(tree):
+                if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    for a in fn.args.args + fn.args.kwonlyargs:
+                        ann = a.annotation
+                        name = ann.id if isinstance(ann, ast.Name) else (ann.value if isinstance(ann, ast.Constant) and isinstance(ann.value, str) else None)
+                        if name in alias:
+                            typed[a.arg] = (alias[name], name)
+            for w in ast.walk(tree):
+                if isinstance(w, ast.With):
+                    for item in w.items:
+                        c = item.context_expr
+                        if (isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and isinstance(c.func.value, ast.Name)
+                                and c.func.value.id in typed and isinstance(item.optional_vars, ast.Name)):
+                            src, cls = typed[c.func.value.id]
+                            typed[item.optional_vars.id] = (src, f"{cls}.{c.func.attr}()")
+            for n in ast.walk(tree):
+                if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and isinstance(n.func.value, ast.Name)
+                        and n.func.value.id in typed):
+                    src, cls = typed[n.func.value.id]
+                    out[p][src].add(f"{cls}.{n.func.attr}")
             for n in ast.walk(tree):
                 if isinstance(n, ast.Call):
                     fn = n.func

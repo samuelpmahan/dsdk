@@ -14,7 +14,6 @@ track = "A1"
 order = 1
 min_imports = 1
 waiver = "Only dsdk.core exists before A1; from A2 onward the minimum is 2."
-thin_owed = "only the kernel exists below logic; its verdict type is the whole dependency (structural, not a debt to pay)"
 
 [packages."dsdk.lang"]
 track = "A2"
