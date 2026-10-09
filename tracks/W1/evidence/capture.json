@@ -1,0 +1,184 @@
+{
+ "track": "W1",
+ "captured_at": "2026-10-09T01:11:28.156Z",
+ "git_sha": "a17e08a6af148be269ec47d756cee42f6183c8a6",
+ "browser": {
+  "name": "chromium",
+  "version": "141.0.7390.37"
+ },
+ "viewport": {
+  "width": 1280,
+  "height": 900
+ },
+ "packet": "tracks/W1/evidence/packet.json",
+ "assertions_total": 31,
+ "assertions_passed": 31,
+ "assertions_failed": 0,
+ "ok": true,
+ "assertions": [
+  {
+   "name": "viewer loaded the packet without a load error",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "keyboard: Tab reaches the skip link, all view buttons and the download link",
+   "passed": true,
+   "detail": "skip > btn-summary > btn-degrees > btn-queries > btn-distances > btn-world > download > BODY > skip > btn-summary > btn-degrees"
+  },
+  {
+   "name": "keyboard: Enter on a focused view button opens that view",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "keyboard: Space on a focused view button opens that view",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "cross-check: zero disagree marks",
+   "passed": true,
+   "detail": "disagree=0"
+  },
+  {
+   "name": "cross-check: marks are actually present (not vacuous)",
+   "passed": true,
+   "detail": "agree=301"
+  },
+  {
+   "name": "download link is a data: URL of the packet",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "page has tables with captions and header cells",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "summary: verdict is stated in text",
+   "passed": true,
+   "detail": "Verdict: supported"
+  },
+  {
+   "name": "provenance footer shows a 40-hex git sha",
+   "passed": true,
+   "detail": "unknown"
+  },
+  {
+   "name": "degrees: demo query is KNOWN with 4 steps",
+   "passed": true,
+   "detail": "KNOWN 4 steps, every one seen back-to-back in a real set."
+  },
+  {
+   "name": "degrees: chain names the tracks and artists end to end",
+   "passed": true,
+   "detail": "Torque by Space Laces SQUNTO played these two back to back on 2018-09-16 Stomp by Kompany PEEKABOO (USA) played these two back to back on 2018-09-15 High Breed by Tokey PEEKABOO (USA) played these two"
+  },
+  {
+   "name": "degrees: every step line names a DJ and an ISO date",
+   "passed": true,
+   "detail": "SQUNTO played these two back to back on 2018-09-16 | PEEKABOO (USA) played these two back to back on 2018-09-15 | PEEKABOO (USA) played these two back to back on 2018-09-15 | PEEKABOO (USA) played these two back to back on 2018-09-15"
+  },
+  {
+   "name": "degrees: \"How do we know?\" table has one row per step",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "degrees: cross-check with Python for the demo query shows agreement",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "degrees: Sandstorm to Codename X is UNKNOWN with exactly one inferred step",
+   "passed": true,
+   "detail": "UNKNOWN 5 steps, 1 of them inferred (never seen in that order, only co-selected). The fewest inferred steps wins."
+  },
+  {
+   "name": "degrees: the inferred step is drawn as inferred, and 4 steps are observed",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "degrees: inferred step says it was never seen back to back",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "degrees: a track that does not exist is INVALID, not UNKNOWN",
+   "passed": true,
+   "detail": "INVALID no track matches \"zzzzzzzz nonsense\". Pick a track from the suggestions."
+  },
+  {
+   "name": "degrees: a pair with no route in the sample is UNKNOWN and says absence is not proof",
+   "passed": true,
+   "detail": "UNKNOWN No route found between these tracks in the sampled corpus. That does not prove there is none: this corpus is a sample (open world)."
+  },
+  {
+   "name": "degrees: \"Surprise me\" gives a verdict",
+   "passed": true,
+   "detail": "KNOWN 16 steps, every one seen back-to-back in a real set."
+  },
+  {
+   "name": "degrees: swap re-asks the reversed question",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "queries: every checked query has a row",
+   "passed": true,
+   "detail": "rows=51"
+  },
+  {
+   "name": "queries: text says all three implementations agree",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "distances: states the 300 random pairs and the median",
+   "passed": true,
+   "detail": "300 random pairs of tracks (seed 2018): 243 connected by observed steps only (median 10 hops, longest 36), 35 need at least one inferred step, 22 have no route in this sample."
+  },
+  {
+   "name": "world: states the corpus size",
+   "passed": true,
+   "detail": "The corpus is derived data from jukebox (samuelpmahan/jukebox, branch lab/composable-mining, commit 8b4d32b): 1352 tracks, 50 DJ credits, 54 sets, 1919 observed back-to-back transitions. It contains no raw tracklist lines."
+  },
+  {
+   "name": "world: provenance sentence is the Part-composed one",
+   "passed": true,
+   "detail": "lost-lands-2018: 1352 tracks, 817 artists, 50 selector groups, 54 sets on 8 dates, 1973 selections, 1919 transitions; sha256 7e0b652aac54 @ 8b4d32b"
+  },
+  {
+   "name": "world: pinned digest is displayed in full",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "cross-check: still zero disagree marks after all interactions",
+   "passed": true,
+   "detail": "disagree=0"
+  },
+  {
+   "name": "no console errors, page errors or failed requests",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "negative control: tampered packet is flagged with disagree marks",
+   "passed": true,
+   "detail": "disagree=2"
+  }
+ ],
+ "screenshots": [
+  "w1-summary.png",
+  "w1-degrees-known.png",
+  "w1-degrees-unknown.png",
+  "w1-queries.png",
+  "w1-distances.png",
+  "w1-world.png",
+  "w1-tamper-control.png"
+ ]
+}

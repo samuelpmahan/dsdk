@@ -39,3 +39,16 @@ def toy_world(**kwargs):
     from dsdk.worlds import parse_lostlands
 
     return parse_lostlands(toy_doc(), **kwargs)
+
+
+KEYS = ["One#001", "Two#001", "Three#001", "Four#001", "Five#001", "Six#001"]
+"""The toy tracks' string keys, by track ID. Graph nodes are named by these keys, so tests spell them out."""
+
+
+def K(i):
+    return KEYS[i]
+
+
+def E(a, b):
+    """The edge key (key_a, key_b) for track IDs a and b."""
+    return (KEYS[a], KEYS[b])

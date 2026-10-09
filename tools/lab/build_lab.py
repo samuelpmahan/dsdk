@@ -96,6 +96,7 @@ def main() -> None:
         "git_sha": sh("git", "rev-parse", "HEAD").decode().strip(),
         "ledger": ledger(), "limits": limits(), "a1": a1(), "lostlands": lostlands(),
         "claims": json.loads((ROOT / "lab/data/claims.json").read_text()),
+        "stack": json.loads((ROOT / "lab/data/stack.json").read_text()),
     }
     page = (ROOT / "lab/src/lab.html").read_text()
     page = page.replace("/*@DATA@*/null", json.dumps(data, separators=(",", ":")))

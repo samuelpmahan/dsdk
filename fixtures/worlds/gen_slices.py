@@ -37,6 +37,11 @@ SEL, TRN = doc["selections"], doc["transitions"]
 N = len(TRK)
 
 
+def K(i):
+    """The track's string key: graph nodes are named by key in dsdk.worlds."""
+    return TRK[i][0]
+
+
 def label(i):
     t = TRK[i]
     s = " & ".join(ART[a] for a in t[2]) + " - " + t[1]
@@ -145,16 +150,16 @@ def hop(a, b):
 def degrees(s, t):
     p = known_path(s, t)
     if p is not None:
-        status, reason = "known", "known path: " + " -> ".join(map(str, p))
+        status, reason = "known", "known path: " + " -> ".join(K(x) for x in p)
     else:
         p = best_path(s, t)
         if p is None:
-            return {"source": s, "target": t, "status": "unknown", "reason": "open world: no path found, but absence of an edge is not proof of impossibility", "path": None, "hops": []}
+            return {"source": s, "target": t, "status": "unknown", "reason": "open world: no path found, but absence of an edge is not proof of impossibility", "path": None, "path_keys": None, "hops": []}
         hops = [hop(a, b) | {"source": a, "target": b} for a, b in zip(p, p[1:])]
-        bad = [f"{h['source']}->{h['target']} ({h['evidence']})" for h in hops if h["evidence"] != "known"]
-        return {"source": s, "target": t, "status": "unknown", "reason": "uncertain edges on best candidate path: " + ", ".join(bad), "path": p, "hops": hops}
+        bad = [f"{K(h['source'])}->{K(h['target'])} ({h['evidence']})" for h in hops if h["evidence"] != "known"]
+        return {"source": s, "target": t, "status": "unknown", "reason": "uncertain edges on best candidate path: " + ", ".join(bad), "path": p, "path_keys": [K(x) for x in p], "hops": hops}
     hops = [hop(a, b) | {"source": a, "target": b} for a, b in zip(p, p[1:])]
-    return {"source": s, "target": t, "status": status, "reason": reason, "path": p, "hops": hops}
+    return {"source": s, "target": t, "status": status, "reason": reason, "path": p, "path_keys": [K(x) for x in p], "hops": hops}
 
 
 # ---- slices ----------------------------------------------------------------------------------------------
@@ -169,7 +174,7 @@ def track_slice(i):
         if b == i:
             in_c[a] += c
     return {
-        "label": label(i), "key": TRK[i][0], "artists": [ART[a] for a in TRK[i][2]],
+        "label": label(i), "key": TRK[i][0], "artist": " & ".join(ART[a] for a in TRK[i][2]), "artists": [ART[a] for a in TRK[i][2]],
         "featured": [ART[a] for a in TRK[i][3]], "variation": TRK[i][4],
         "sets": sorted(map(list, track_sets[i])),
         "selections": sum(1 for t, _, _ in SEL if t == i),

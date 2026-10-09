@@ -42,11 +42,14 @@ UNCERTAIN: tuple[Status, ...] = (Status.UNKNOWN, Status.NOT_OBSERVED)
 def known_subgraph(g: Graph) -> Graph:
     """A graph with the same ``nodes`` (same order, so isolated nodes survive), the same ``directed`` and
     ``closed_world`` flags, and only the edges whose evidence is ``Status.KNOWN``."""
-    return Graph.from_edges(
-        [e for e in g.edges if e.evidence is Status.KNOWN],
-        g.nodes,
-        directed=g.directed,
-        closed_world=g.closed_world,
+    return g._cached(
+        "_known_subgraph",
+        lambda: Graph.from_edges(
+            [e for e in g.edges if e.evidence is Status.KNOWN],
+            g.nodes,
+            directed=g.directed,
+            closed_world=g.closed_world,
+        ),
     )
 
 

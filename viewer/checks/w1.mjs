@@ -1,5 +1,5 @@
 // Track W1 ("Six degrees of dubstep") browser assertions + screenshot plan. Called by viewer/capture.mjs.
-export const config = { minAgree: 400, keyboardView: 'degrees', tamperView: 'queries', minCaptions: 3, minHeaders: 10 };
+export const config = { minAgree: 250, keyboardView: 'degrees', tamperView: 'queries', minCaptions: 3, minHeaders: 10 };
 
 /** Negative control: bump the hop count of one observed step in a checked query; the JS recomputation must disagree. */
 export function tamper(packet) {

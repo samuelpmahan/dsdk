@@ -213,9 +213,49 @@ class Graph:
         """True iff ``node`` is one of ``nodes``."""
         return node in self._positions()
 
+    def _cached(self, name: str, build):
+        """Lazily computed, per-instance cache. A Graph is immutable, so a derived index never goes stale. The cache
+        lives in ``__dict__`` (not a dataclass field), so equality, hashing and ``repr`` are unaffected."""
+        cache = self.__dict__
+        if name not in cache:
+            cache[name] = build()
+        return cache[name]
+
     def _positions(self) -> dict[Hashable, int]:
-        """Node -> position in ``nodes`` (internal lookup helper)."""
-        return {node: i for i, node in enumerate(self.nodes)}
+        """Node -> position in ``nodes`` (internal lookup helper; cached, treat as read-only)."""
+        return self._cached("_pos", lambda: {node: i for i, node in enumerate(self.nodes)})
+
+    def _edge_index(self) -> dict[tuple[Hashable, Hashable], Edge]:
+        """``(source, target)`` -> the stored edge (cached). Undirected edges are stored in one orientation only."""
+        return self._cached("_edge_ix", lambda: {(e.source, e.target): e for e in self.edges})
+
+    def _successor_positions(self) -> list[tuple[int, ...]]:
+        """For each node position, the sorted positions of its neighbours (directed: successors; undirected: all
+        neighbours; a self-loop lists the node once). Cached."""
+
+        def build() -> list[tuple[int, ...]]:
+            pos = self._positions()
+            found: list[set[int]] = [set() for _ in self.nodes]
+            for e in self.edges:
+                s, t = pos[e.source], pos[e.target]
+                found[s].add(t)
+                if not self.directed:
+                    found[t].add(s)
+            return [tuple(sorted(x)) for x in found]
+
+        return self._cached("_succ_ix", build)
+
+    def _predecessor_positions(self) -> list[tuple[int, ...]]:
+        """Directed graphs: for each node position, the sorted positions of its in-neighbours. Cached."""
+
+        def build() -> list[tuple[int, ...]]:
+            pos = self._positions()
+            found: list[set[int]] = [set() for _ in self.nodes]
+            for e in self.edges:
+                found[pos[e.target]].add(pos[e.source])
+            return [tuple(sorted(x)) for x in found]
+
+        return self._cached("_pred_ix", build)
 
     def _position_or_raise(self, node: Hashable) -> int:
         """Position of ``node``; :class:`MissingNodeError` if absent (internal helper)."""
@@ -236,12 +276,11 @@ class Graph:
         """
         if not (self.has_node(u) and self.has_node(v)):
             return None
-        for edge in self.edges:
-            if edge.source == u and edge.target == v:
-                return edge
-            if not self.directed and edge.source == v and edge.target == u:
-                return edge
-        return None
+        index = self._edge_index()
+        edge = index.get((u, v))
+        if edge is None and not self.directed:
+            edge = index.get((v, u))
+        return edge
 
     def has_edge(self, u: Hashable, v: Hashable) -> bool:
         """``get_edge(u, v) is not None``."""
@@ -253,15 +292,7 @@ class Graph:
         A self-loop makes ``node`` its own neighbour. :class:`MissingNodeError` if ``node`` is absent.
         """
         me = self._position_or_raise(node)
-        pos = self._positions()
-        found: set[int] = set()
-        for edge in self.edges:
-            s, t = pos[edge.source], pos[edge.target]
-            if s == me:
-                found.add(t)
-            if not self.directed and t == me:
-                found.add(s)
-        return tuple(self.nodes[i] for i in sorted(found))
+        return tuple(self.nodes[i] for i in self._successor_positions()[me])
 
     def predecessors(self, node: Hashable) -> tuple[Hashable, ...]:
         """Directed: nodes ``p`` with an edge ``p -> node``, in node order. Undirected: same as ``neighbors``.
@@ -271,9 +302,7 @@ class Graph:
         if not self.directed:
             return self.neighbors(node)
         me = self._position_or_raise(node)
-        pos = self._positions()
-        found = {pos[e.source] for e in self.edges if pos[e.target] == me}
-        return tuple(self.nodes[i] for i in sorted(found))
+        return tuple(self.nodes[i] for i in self._predecessor_positions()[me])
 
     def adjacency(self) -> dict[Hashable, tuple[Hashable, ...]]:
         """Adjacency-list view: ``{node: neighbors(node)}`` for EVERY node (isolated nodes map to ``()``),
