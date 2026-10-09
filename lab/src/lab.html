@@ -216,7 +216,7 @@ footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;fl
     <details class="how">
       <summary>How do we know?</summary>
       <div class="body">
-        <p style="margin:0">Every number comes from <code>ops/ledger.jsonl</code>, which is appended after the planner re-runs each claimed result. Intervals are Wilson 95% intervals computed in this page. Once the probability track lands, they will come from <code>dsdk.prob</code>, and the two will be checked against each other.</p>
+        <p style="margin:0">Every number comes from <code>ops/ledger.jsonl</code>, which is appended after the planner re-runs each claimed result. Intervals are exact (Clopper-Pearson) 95% intervals computed in this page, which cover the true rate at least 95% of the time. An earlier version showed Wilson intervals. The probability-proof audit found those really cover only about 84% of the time near 0% or 100%, which is exactly where Haiku's rate sits. An exact interval is being added to <code>dsdk.prob</code> so the two can be checked against each other.</p>
         <dl class="ev" id="ev-build"></dl>
       </div>
     </details>
@@ -251,6 +251,13 @@ const AND = (fs) => fs.length===0 ? {op:'const',value:true} : fs.reduce((a,b)=>(
 const OR = (fs) => fs.length===0 ? {op:'const',value:false} : fs.reduce((a,b)=>({op:'or',left:a,right:b}));
 function fillEv(id, rows){ const dl=$(id); dl.replaceChildren(); for (const [k,v] of rows){ dl.append(el('dt',{text:k}), el('dd',{text:v})); } }
 function wilson(k,n){ if(!n) return [0,0]; const z=1.96, p=k/n, d=1+z*z/n, c=p+z*z/(2*n), m=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n)); return [(c-m)/d,(c+m)/d]; }
+// Exact (Clopper-Pearson) 95% interval: coverage is at least 95% for every n and p, unlike Wilson,
+// whose true coverage dips to about 84% for rare or near-certain events (dsdk probability proof audit).
+function binomCdf(k,n,p){ let s=0,t=Math.pow(1-p,n); for(let i=0;i<=k;i++){ s+=t; t*= (n-i)/(i+1)*p/(1-p); } return s; }
+function exact(k,n){ if(!n) return [0,1]; const a=0.025, bis=(f)=>{let lo=0,hi=1; for(let i=0;i<60;i++){const m=(lo+hi)/2; if(f(m)) hi=m; else lo=m;} return (lo+hi)/2;};
+  const low = k===0 ? 0 : bis(p => 1-binomCdf(k-1,n,p) >= a);
+  const high = k===n ? 1 : bis(p => binomCdf(k,n,p) <= a);
+  return [low,high]; }
 
 // ---------- Logic Cave ----------
 const N = 4;
@@ -415,8 +422,8 @@ function renderBuild(){
   const tiles=$('#build-tiles');
   for (const m of ['haiku','sonnet']){
     const rs=by[m]||[], first=rs.filter(r=>r.attempt===1), ok=first.filter(r=>r.outcome==='pass').length;
-    const [lo,hi]=wilson(ok, first.length);
-    tiles.append(el('div',{class:'tile'}, el('span',{class:'k',text:`${m} first try`}), el('span',{class:'v',text:first.length?Math.round(100*ok/first.length)+'%':'–'}), el('span',{class:'s',text:`${ok} of ${first.length} · 95% interval ${Math.round(lo*100)}–${Math.round(hi*100)}%`})));
+    const [lo,hi]=exact(ok, first.length);
+    tiles.append(el('div',{class:'tile'}, el('span',{class:'k',text:`${m} first try`}), el('span',{class:'v',text:first.length?Math.round(100*ok/first.length)+'%':'–'}), el('span',{class:'s',text:`${ok} of ${first.length} · exact 95% interval ${Math.round(lo*100)}–${Math.round(hi*100)}%`})));
   }
   const wall=rows.reduce((s,r)=>s+(r.wall_s||0),0);
   tiles.append(el('div',{class:'tile'}, el('span',{class:'k',text:'attempts logged'}), el('span',{class:'v',text:String(rows.length)}), el('span',{class:'s',text:`${Math.round(wall/60)} agent-minutes of work`})));

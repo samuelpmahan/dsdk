@@ -29,10 +29,13 @@ never dropped (weights become 0), so the world lists coincide too. ∎
 
 ## Proof 2 -- impossible evidence is exactly the INVALID case (never a fabricated number)
 
-**Claim.** `probability(b, q, e)` returns INVALID iff `M([e]) = 0` (or `T = 0` when `e` is absent). In particular if `e` is
-unsatisfiable, `logic.entails([e], q)` holds for every `q` (vacuous truth) yet the code does not report probability 1.
+**Claim.** Let `q` and `e` mention only variables the belief models. Then `probability(b, q, e)` returns INVALID iff `M([e]) = 0`
+(or `T = 0` when `e` is absent). In particular if `e` is unsatisfiable, `logic.entails([e], q)` holds for every `q` (vacuous truth) yet
+the code does not report probability 1. *Scope:* if `q` or `e` mentions a variable the belief does not model, the code answers UNKNOWN
+before it looks at any denominator (it cannot evaluate the formula at all), so unsatisfiable evidence over an unmodelled variable is
+UNKNOWN, not INVALID. The "iff" is therefore a statement about modelled variables only.
 
-*Proof.* The only division in the function is by `M([e])` (resp. `T`); the code tests that denominator against 0 first. If the
+*Proof.* After the unmodelled-variable check (UNKNOWN, outside the claim), the only division in the function is by `M([e])` (resp. `T`); the code tests that denominator against 0 first. If the
 denominator is 0 the quotient `0/0` has no value in any consistent extension of the rationals: for every `c`, `c * 0 = 0 = M([q ∧ e])`,
 so `P(q | e) = c` satisfies the defining equation `P(q | e) P(e) = P(q ∧ e)` for ALL `c`. The conditional probability is therefore
 *undetermined*, not 0 and not 1, and the contract reports INVALID. For unsatisfiable `e`, `[e] = ∅` so `M([e]) = 0`: the logic's
@@ -66,30 +69,53 @@ weights are `(1-p)^3 * {(1-p)p, p(1-p), p^2}`, the same proportions as above. He
 
 ## Proof 4 -- inverse-CDF draws have the right law (and never pick a zero-weight outcome)
 
-**Algorithm.** `cum[i] = float((w_0 + ... + w_i) / W)`, `u = rng.random()` uniform on `[0,1)`, index = first `i` with `cum[i] > u`
-(`bisect_right`).
+**Algorithm.** `cum[i] = float((w_0 + ... + w_i) / W)`, `u = rng.random()`, index = first `i` with `cum[i] > u` (`bisect_right`).
+`random()` is NOT a continuous uniform: it returns `k / 2^53` with `k` uniform on the integers `0 .. 2^53 - 1`. The argument below uses that grid.
 
-**Claim.** With exact cumulatives `C_i = (w_0 + ... + w_i) / W` (`C_{-1} = 0`, `C_last = 1`), `P(index = i) = C_i - C_{i-1} = w_i / W`.
-With the floats of the code, the law differs from it by at most `2^-53` per boundary, and an outcome with `w_i = 0` has probability exactly 0.
+**Claim.** With exact cumulatives `C_i = (w_0 + ... + w_i) / W` (`C_{-1} = 0`, `C_last = 1`) and `c_i = cum[i]` the double nearest to `C_i`:
+(a) `P(index <= i) = ceil(c_i * 2^53) / 2^53` exactly, and `|P(index <= i) - C_i| < 2^-53` for every `i`;
+(b) hence `|P(index = i) - w_i / W| < 2^-52`;
+(c) an outcome with `w_i = 0` has probability exactly 0;
+(d) an outcome with a positive but tiny share `w_i / W` (below about `2^-53`) is drawn with probability 0 unless a grid point `k / 2^53` happens
+to fall in `[c_{i-1}, c_i)`, and in no case with probability above `w_i / W + 2^-52`: in practice it is never drawn.
 
-*Proof.* `index = i` iff `C_{i-1} <= u < C_i` (first `i` whose cumulative exceeds `u`), an interval of length `w_i / W` for the uniform
-`u`. If `w_i = 0` the interval is empty, and `cum[i] = cum[i-1]` as floats (the same exact value is rounded once), so the first index
-with `cum > u` can never be `i`. Since `u < 1 = cum[last]` an index always exists. Rounding each boundary to the nearest double moves
-it by at most `2^-53` (relative to values in `[0,1]`), changing each interval's length by at most `2^-52`. ∎
+*Proof.* (a) `index <= i` iff `c_i > u` (the first cumulative above `u` is at position `<= i` iff `c_i` itself is above `u`, since the
+`c` are non-decreasing). With `u = k / 2^53` that holds for the `k` with `0 <= k < c_i * 2^53`; there are `ceil(c_i * 2^53)` of them, each with probability
+`2^-53`. For the error, write `E = ceil(c_i 2^53) / 2^53 - C_i = (ceil(y) - y) / 2^53 + (c_i - C_i)` with `y = c_i 2^53`, and count in units of `2^-53`.
+Doubles in `[2^-j, 2^(1-j))` are multiples of `2^-(52+j)`, so for such a `c_i`: the rounding error `|c_i - C_i|` is at most half of that spacing, i.e.
+`2^-j` units; and `y` is a multiple of `2^(1-j)` so `ceil(y) - y <= 1 - 2^(1-j)` units. *Case `j = 1`* (`c_i` in `[1/2, 1)`, plus `c_i = 1` where `y = 2^53` is
+an integer): `y` is an integer, so `ceil(y) - y = 0` and `E = c_i - C_i`, with `|E| <= 1/2` unit. *Case `j >= 2`:* `E` lies between `-2^-j` and
+`(1 - 2^(1-j)) + 2^-j = 1 - 2^-j`, so `|E| < 1` unit. `c_i = 0` (a prefix of zero weights) gives `ceil(0) = 0` and `E = 0`. In every case `|E| < 2^-53`.
+This is the audit's measured worst case (0.998 of a unit) as a proof: the grid contributes up to one unit, the rounding a fraction of a unit, and they
+cannot add up to a full unit because a `c_i` that rounds coarsely (`j = 1`) already sits exactly on the grid. (b) `P(index = i) = P(index <= i) - P(index <= i-1)`, two
+quantities each within `2^-53` of `C_i`, `C_{i-1}`. (c) If `w_i = 0` then `C_i = C_{i-1}`, hence `c_i = c_{i-1}` (the same exact value is rounded once), so
+`ceil(c_i 2^53) = ceil(c_{i-1} 2^53)` and `P(index = i) = 0`. Since `u < 1 = c_last` an index always exists. (d) `P(index = i)` is a difference of two
+integer multiples of `2^-53`, so it is 0 or at least `2^-53`; by (b) it is below `w_i / W + 2^-52`. For a share far below `2^-53` the interval
+`[c_{i-1}, c_i)` is shorter than a grid cell and contains a grid point only by alignment. Example (checked by the audit): weights `(1, 10^-20)` never drew the
+second outcome in 200,000 draws; its probability under the float algorithm is exactly 0. ∎
+
+*Consequence for users:* weights whose share of the total is below about `2^-53` (roughly `1.1e-16`) are not faithfully sampled: they are effectively never drawn.
+This is stated in the docstrings of `inverse_cdf_draws` and `sample_worlds`.
 
 ## Proof 5 -- the Monte Carlo estimator: unbiased, variance `p(1-p)/n`, and what the interval means
 
 **Claim.** Let `X_1..X_n` be i.i.d. draws from a normalised belief and `S = #{X_j ⊨ q}`. (a) `p_hat = S/n` is unbiased for `p = P(q)`.
 (b) `Var(p_hat) = p(1-p)/n`, so the reported `stderr = sqrt(p_hat (1-p_hat)/n)` estimates the standard deviation of `p_hat`. (c) For
-rejection sampling with evidence `e`, the accepted draws are i.i.d. from `P(. | e)` and `p_hat = S_e / N_e` estimates `P(q | e)`.
-(d) The Wilson interval has asymptotic coverage 95 % (it is not exact for finite `n`; the test only asserts empirical coverage within
-a band).
+rejection sampling with evidence `e`, given `N_e = m >= 1` accepted draws, those draws are i.i.d. from `P(. | e)`, and `p_hat = S_e / N_e` is UNBIASED for
+`P(q | e)`: `E[S_e / N_e | N_e >= 1] = P(q | e)`. (Without the conditioning the estimator is a ratio with a random denominator and is only consistent.)
+(d) The Wilson interval has asymptotic coverage 95 %. For finite `n` the exact coverage (summing binomial probabilities) dips below the label. On the audit's grid of true `p` from 0.01 to 0.99 in
+steps of 0.01 the smallest values are 90.4 % at `n = 10` (at `p = 0.01`), 93.0 % at `n = 30` (at `p = 0.3`) and 92.1 % at `n = 100` (at `p = 0.01`). Those
+are minima over a coarse grid. Coverage oscillates sharply for small `p`, and on a grid of step 0.0005 I measured lower minima: 83.8 % at `n = 10` (near `p = 0.0175`),
+84.8 % at `n = 30` (near `p = 0.0055`) and 86.1 % at `n = 100` (near `p = 0.0015`). So a reader of "95 %" can be off by 5 points at moderate `p` and by about 10
+points for rare events, at the sample sizes the Lab uses; the tests only assert empirical coverage within a band over seeds.
 
 *Proof.* (a,b) `S ~ Binomial(n, p)` because the indicator `1[X_j ⊨ q]` is Bernoulli(p) and independent. `E[S] = np`,
-`Var(S) = np(1-p)`; divide by `n` and `n^2`. (c) For a measurable set `A` of worlds, `P(X ∈ A | X ⊨ e) = P(X ∈ A ∩ [e]) / P(e)`, and
-conditioning an i.i.d. sequence on "accept" independently for each draw gives an i.i.d. sequence from that conditional law; the number
-of accepted draws `N_e` is random (Binomial(n, P(e))), so the estimator is a ratio and is only *consistent*, not unbiased, for finite
-`n` (given `N_e = m > 0` it is unbiased for `P(q|e)`). When `N_e = 0` nothing can be said: UNKNOWN (Proof 2 remark). (d) The Wilson
+`Var(S) = np(1-p)`; divide by `n` and `n^2`. (c) For a measurable set `A` of worlds, `P(X ∈ A | X ⊨ e) = P(X ∈ A ∩ [e]) / P(e)`. Fix the set of positions `J` (of size `m >= 1`)
+where the draws were accepted. The draws are independent, so conditioning on "accepted exactly at `J`" leaves the accepted draws independent, each
+with law `P(. | e)`; thus `S_e | (N_e = m, J) ~ Binomial(m, P(q | e))` and `E[S_e / m | N_e = m, J] = P(q | e)`. Averaging over `J` and over `m >= 1`
+gives `E[S_e / N_e | N_e >= 1] = P(q | e)`: unbiased given at least one accepted draw (the audit confirmed this by enumerating all `4^n` draw sequences for
+`n = 2, 4, 6`). Because `N_e` is random (Binomial(`n`, `P(e)`)) and can be 0, the unconditional estimator is a ratio and is only *consistent*. When `N_e = 0`
+nothing can be said: UNKNOWN (Proof 2 remark). (d) The Wilson
 interval is the set of `p0` with `|p_hat - p0| <= z sqrt(p0(1-p0)/n)`, obtained by inverting the CLT test; by the CLT its coverage tends
 to `P(|Z| <= 1.96) = 0.95`. Solving the quadratic `(p_hat - p0)^2 = z^2 p0 (1-p0)/n` for `p0` gives
 `(p_hat + z^2/2n ± z sqrt(p_hat(1-p_hat)/n + z^2/4n^2)) / (1 + z^2/n)`, the formula in `wilson_interval`. It contains `p_hat` and,
@@ -131,3 +157,15 @@ rare transitions (`q < 1/|V|`) and downward for common ones. That bias is the pr
 unseen transition; `test_larger_alpha_flattens_towards_uniform` and `test_smaller_alpha_is_better_on_training_pairs_larger_on_unseen_ones`
 pin the behaviour the correct analysis predicts (variance falls, bias grows with `alpha`). With `alpha = 0` the estimator is unbiased
 whenever `n_x > 0`, but then rows with `n_x = 0` have no value at all, which is why the contract answers UNKNOWN there.
+
+---
+
+## After audit (changes made in response to tracks/A3/AUDIT.md)
+
+| Audit finding | What was wrong | Fix |
+|---|---|---|
+| The "iff" in the impossible-evidence proof is overstated | The code answers UNKNOWN before INVALID when evidence mentions an unmodelled variable | Proof 2's claim now restricts to modelled variables and states the scope explicitly; the proof names the unmodelled check as coming first |
+| The inverse-CDF proof treats `random()` as continuous | Python's `random()` is uniform on the grid `k / 2^53`; the bound held but the argument did not cover it | Proof 4 redone on the grid: exact law `ceil(c_i 2^53) / 2^53`, case split on the double spacing, strict bound below one unit of `2^-53` per boundary (the audit's 0.998 is the worst case of this bound) |
+| A positive weight below about `2^-53` of the total is never drawn | Not stated | New claim (d) in Proof 4 and a consequence paragraph; sentence added to the docstrings of `inverse_cdf_draws` and `sample_worlds` (text only, no behaviour change) |
+| Wilson coverage stated only asymptotically | The finite-sample numbers matter for the Lab | Claim (d) of Proof 5 now gives the exact coverage minima from the audit's grid (90.4 % at n=10, 93.0 % at n=30, 92.1 % at n=100) and, from a finer grid I ran afterwards, the lower true minima for rare events (83.8 %, 84.8 %, 86.1 %) |
+| "Consistent" understated the ratio estimator | The audit enumerated all draw sequences | Claim (c) now says unbiased given at least one accepted draw, with the conditioning argument; the audit's enumeration is cited |

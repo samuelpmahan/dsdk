@@ -161,7 +161,7 @@ def inverse_cdf_draws(weights: Sequence[Fraction], n: int, seed: int) -> tuple[i
     ``weights`` is a non-empty sequence of non-negative ``Fraction`` with a positive sum (``ValueError`` otherwise;
     non-Fraction elements: ``TypeError``). ``n`` an int >= 0 and ``seed`` an int (bool is rejected; ``TypeError``/``ValueError``).
     ``n == 0`` gives ``()``. The same ``(weights, n, seed)`` always gives the same tuple, and the first ``m`` draws of
-    ``n`` draws equal the ``m`` draws made with the same seed (draws are consumed one ``rng.random()`` at a time).
+    ``n`` draws equal the ``m`` draws made with the same seed (draws are consumed one ``rng.random()`` at a time). A positive weight whose share of the total is below about ``2**-53`` is effectively never drawn (the float algorithm gives it probability 0 unless a grid point of ``random()`` happens to fall in its tiny interval); see tracks/A3/PROOFS.md, Proof 4.
     """
     if not isinstance(weights, Sequence) or isinstance(weights, (str, bytes)):
         raise TypeError("weights must be a sequence of Fraction")
@@ -192,7 +192,7 @@ def sample_worlds(b: Belief, n: int, seed: int) -> Judgment:
     ``((("A", True), ("B", False)), ...)``), using :func:`inverse_cdf_draws` over ``[w.weight for w in b.worlds]``.
     ``INVALID`` (reason mentions "zero total weight") if ``b.total == 0`` (nothing to sample). A belief with total > 0 never
     yields a zero-weight world. ``TypeError`` for a non-Belief, bad ``n``/``seed`` as in ``inverse_cdf_draws``
-    (checked even when the belief is INVALID: argument errors first).
+    (checked even when the belief is INVALID: argument errors first). A positive weight whose share of the total is below about ``2**-53`` is effectively never drawn (the float algorithm gives it probability 0 unless a grid point of ``random()`` happens to fall in its tiny interval); see tracks/A3/PROOFS.md, Proof 4.
     """
     if not isinstance(b, Belief):
         raise TypeError(f"sample_worlds() takes a Belief, not {type(b).__name__}")
