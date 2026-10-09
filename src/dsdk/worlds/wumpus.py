@@ -261,6 +261,20 @@ class AgentRun:
     gambles: tuple[Cell, ...]
 
 
+_STUCK_RISK: dict = {}
+"""Module-level memo of :func:`stuck_risk` by :func:`state_key` (a knowledge state always has the same risk)."""
+
+
+def _cached_stuck_risk(percepts: dict) -> Judgment:
+    """:func:`stuck_risk` of ``percepts``, computed once per knowledge state."""
+    if not isinstance(percepts, dict):
+        raise TypeError(f"percepts must be a dict of cell -> Percept, not {type(percepts).__name__}")
+    key = state_key(percepts)
+    if key not in _STUCK_RISK:
+        _STUCK_RISK[key] = stuck_risk(percepts)
+    return _STUCK_RISK[key]
+
+
 def run_agent(cave: Cave, *, probabilistic: bool = False, exactly_one_wumpus: bool = False, risk_limit: object = None) -> AgentRun:
     """Play one cave. Starting on (1,1) with its percept:
     1. a square with glitter while the gold is not carried: take the gold;
@@ -283,6 +297,9 @@ def run_agent(cave: Cave, *, probabilistic: bool = False, exactly_one_wumpus: bo
       (after the limit itself has been validated). A limited agent either picks the same square as the unlimited one or stops, so every stuck state it
       reaches is also reached by the unlimited probabilistic agent on the same cave.
     """
+    limit = None if risk_limit is None else to_prob(risk_limit, "risk_limit")
+    if limit is not None and not probabilistic:
+        raise ValueError("risk_limit needs probabilistic=True")
     percepts: dict = {START: percept(cave, START, False)}
     here = START
     has_gold = False
@@ -301,10 +318,10 @@ def run_agent(cave: Cave, *, probabilistic: bool = False, exactly_one_wumpus: bo
         stuck.append(dict(percepts))
         if not probabilistic:
             return AgentRun("climbed out empty-handed", tuple(stuck), tuple(gambles))
-        risk = stuck_risk(percepts)
+        risk = _cached_stuck_risk(percepts)
         if risk.status is not Status.KNOWN:
             raise RuntimeError(risk.reason)
-        options = [r for r in risk.value.frontier if r.death != 1]
+        options = [r for r in risk.value.frontier if r.death != 1 and (limit is None or r.death <= limit)]
         if not options:
             return AgentRun("climbed out empty-handed", tuple(stuck), tuple(gambles))
         best = min(options, key=lambda r: (r.death, r.cell))
@@ -329,7 +346,9 @@ def sweep_rates(seeds, *, probabilistic: bool, exactly_one_wumpus: bool = False,
     caves = died = gold = empty = 0
     for s in seeds:
         caves += 1
-        outcome = run_agent(seeded_cave(s), probabilistic=probabilistic, exactly_one_wumpus=exactly_one_wumpus).outcome
+        outcome = run_agent(
+            seeded_cave(s), probabilistic=probabilistic, exactly_one_wumpus=exactly_one_wumpus, risk_limit=risk_limit
+        ).outcome
         if outcome == "died":
             died += 1
         elif outcome == "escaped with gold":
@@ -372,7 +391,29 @@ def risk_curve(seeds=range(1, 301), limits=RISK_LIMITS, *, exactly_one_wumpus: b
     converted with ``dsdk.prob.to_prob``. ``seeds`` is consumed once (a range or any iterable of ints); no seeds at all raises ``ValueError("risk_curve
     needs at least one seed")``. Over seeds 1 to 300 with the default limits the (died, gold) pairs are (0, 79), (0, 79), (3, 86), (21, 102), (32, 109), (146, 133).
     """
-    raise NotImplementedError
+    seeds = list(seeds)
+    if not seeds:
+        raise ValueError("risk_curve needs at least one seed")
+    points: list[CurvePoint] = []
+    for limit in limits:
+        r = sweep_rates(seeds, probabilistic=True, exactly_one_wumpus=exactly_one_wumpus, risk_limit=limit)
+        death_low, death_high = _cached_interval(r.died, r.caves)
+        gold_low, gold_high = _cached_interval(r.gold, r.caves)
+        points.append(
+            CurvePoint(to_prob(limit, "risk_limit"), r.caves, r.died, r.gold, r.empty, death_low, death_high, gold_low, gold_high)
+        )
+    return tuple(points)
+
+
+_INTERVALS: dict = {}
+"""Module-level memo of :func:`dsdk.prob.exact_interval` by ``(successes, trials)`` at 95%."""
+
+
+def _cached_interval(successes: int, trials: int) -> tuple[float, float]:
+    key = (successes, trials)
+    if key not in _INTERVALS:
+        _INTERVALS[key] = exact_interval(successes, trials)
+    return _INTERVALS[key]
 
 
 def frac(x: Fraction) -> str:
@@ -397,7 +438,7 @@ def lab_data(seeds=range(1, 301)) -> dict:
                 key = state_key(st)
                 if key in states:
                     continue
-                risk = stuck_risk(st)
+                risk = _cached_stuck_risk(st)
                 if risk.status is not Status.KNOWN:
                     raise RuntimeError(risk.reason)
                 states[key] = {
@@ -408,4 +449,16 @@ def lab_data(seeds=range(1, 301)) -> dict:
     for label, prob in (("logic", False), ("probabilistic", True)):
         r = sweep_rates(seeds, probabilistic=prob)
         rates[label] = {"caves": r.caves, "died": r.died, "gold": r.gold, "empty": r.empty}
-    return {"pit_prior": frac(PIT_PRIOR), "states": states, "rates": rates}
+    curve = [
+        {
+            "limit": frac(p.limit),
+            "caves": p.caves,
+            "died": p.died,
+            "gold": p.gold,
+            "empty": p.empty,
+            "death": [p.death_low, p.death_high],
+            "gold_ci": [p.gold_low, p.gold_high],
+        }
+        for p in risk_curve(seeds)
+    ]
+    return {"pit_prior": frac(PIT_PRIOR), "states": states, "rates": rates, "curve": curve}
