@@ -245,7 +245,31 @@ def first_try_summary(entries: Iterable[LedgerEntry], model: str, *, confidence:
     There is no UNKNOWN case: one attempt gives a wide interval rather than a refusal, because the interval IS the statement of how
     little is known. ``entries`` may be a one-shot iterator (consumed once).
     """
-    raise NotImplementedError
+    if not isinstance(model, str) or model == "":
+        return Judgment(Status.INVALID, None, "model must be a non-empty string")
+    if (
+        isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+        or not (0 < confidence < 1)
+    ):
+        return Judgment(Status.INVALID, None, "confidence must be a number strictly between 0 and 1")
+
+    passes = 0
+    attempts = 0
+    for entry in entries:
+        if entry.model == model and entry.attempt == 1:
+            attempts += 1
+            if entry.outcome == "pass":
+                passes += 1
+
+    if attempts == 0:
+        return Judgment(Status.NOT_OBSERVED, None, f"no attempt-1 entries for {model!r}")
+
+    low, high = exact_interval(passes, attempts, confidence)
+    pct = f"{float(confidence) * 100:g}"
+    reason = f"{passes}/{attempts} attempt-1 runs passed; exact {pct}% interval {low:.3f} to {high:.3f}"
+    value = FirstTry(passes, attempts, passes / attempts, low, high, float(confidence))
+    return Judgment(Status.KNOWN, value, reason)
 
 
 @dataclass(frozen=True)
@@ -277,4 +301,29 @@ def round_throughput(entries: Iterable[LedgerEntry]) -> tuple[RoundStats, ...]:
     left out. An empty input, or one with no round numbers, gives ``()``. Rounds with no entries do not appear (gaps stay gaps).
     ``entries`` may be a one-shot iterator.
     """
-    raise NotImplementedError
+    groups: dict[int, list[LedgerEntry]] = {}
+    for entry in entries:
+        if entry.round is None:
+            continue
+        groups.setdefault(entry.round, []).append(entry)
+
+    result = []
+    for round_no in sorted(groups):
+        group = groups[round_no]
+        first_try = [e for e in group if e.attempt == 1]
+        green = [e.tests_passed for e in group if e.outcome == "pass" and e.tests_passed is not None]
+        result.append(
+            RoundStats(
+                round=round_no,
+                attempts=len(group),
+                passes=sum(1 for e in group if e.outcome == "pass"),
+                first_try_attempts=len(first_try),
+                first_try_passes=sum(1 for e in first_try if e.outcome == "pass"),
+                agent_seconds=float(sum(e.wall_s for e in group)),
+                tests_green=sum(green),
+                started=min(e.ts for e in group),
+                finished=max(e.ts for e in group),
+                models=tuple(sorted({e.model for e in group})),
+            )
+        )
+    return tuple(result)
