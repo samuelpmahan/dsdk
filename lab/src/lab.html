@@ -149,6 +149,7 @@ footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;fl
         <button id="cave-step" type="button" class="primary">Step</button>
         <button id="cave-run" type="button">Run to end</button>
         <label class="inline" for="cave-reveal"><input id="cave-reveal" type="checkbox"> Reveal the true cave</label>
+        <label class="inline" for="cave-prob"><input id="cave-prob" type="checkbox"> Probabilistic agent (gambles on the least risky square when nothing is provable)</label>
       </div>
       <div class="cave-row">
         <div style="display:grid;gap:10px;min-width:0">
@@ -164,6 +165,7 @@ footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;fl
         <div class="readout">
           <div class="stats" id="cave-stats"></div>
           <div class="why" id="cave-why" aria-live="polite"></div>
+          <div class="why" id="cave-rung" aria-live="polite"></div>
           <div><h3 style="font-size:18px">Agent log</h3><ol class="log" id="cave-log"></ol></div>
         </div>
       </div>
@@ -171,8 +173,10 @@ footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;fl
     <details class="how">
       <summary>How do we know?</summary>
       <div class="body">
-        <p style="margin:0">The page runs the same JavaScript logic engine that is held to the Python-verified fixtures. Pit facts and Wumpus facts share no variables, so each square is two separate entailment checks: the knowledge base must prove "no pit here" and "no Wumpus here". The agent is sound but deliberately incomplete. It does not assume exactly one Wumpus, and it never gambles. When nothing is provable it climbs out, and that gap is what the probability track (A3) will fill.</p>
+        <p style="margin:0">The page runs the same JavaScript logic engine that is held to the Python-verified fixtures. Pit facts and Wumpus facts share no variables, so each square is two separate entailment checks: the knowledge base must prove "no pit here" and "no Wumpus here". The agent is sound but deliberately incomplete. It does not assume exactly one Wumpus, and it never gambles. When nothing is provable it climbs out. That is where the probability rung takes over: <code>dsdk.prob</code> answers the exact chance of a pit or the Wumpus on each frontier square, and the optional probabilistic agent steps on the least risky one. dsdk computes those numbers when the page is built; this page recomputes every one itself and shows agree or DISAGREE.</p>
         <div class="controls"><button id="sweep" type="button">Run the soundness sweep here (300 random caves)</button><span id="sweep-out" class="stats" aria-live="polite"></span></div>
+        <div class="controls"><button id="sweep2" type="button">Compare the logic agent with the probabilistic agent (seeds 1 to 300)</button></div>
+        <div id="sweep2-out" aria-live="polite"></div>
         <dl class="ev" id="ev-a1"></dl>
       </div>
     </details>
@@ -320,7 +324,9 @@ function step(){
   if (here.glitter){ agent.hasGold=true; agent.percepts.set(agent.pos, percept(agent.pos)); logLine(`Grabs the gold at (${agent.pos}).`); render(); return; }
   if (agent.hasGold){ goHome('Heads home with the gold'); return; }
   const safe=[...verdicts.entries()].filter(([,v])=>v.safe).map(([c])=>c);
-  if (!safe.length){ goHome('No frontier square is provably safe. A logic-only agent will not gamble, so it'); return; }
+  if (!safe.length){
+    if (probMode){ if (gamble()) return; goHome('No frontier square is provably safe and every one is certain death, so the probabilistic agent'); return; }
+    noteStuck(); goHome('No frontier square is provably safe. A logic-only agent will not gamble, so it'); return; }
   let best=null; for(const c of safe){ const p=pathTo(c, agent.visited); if(p && (!best || p.length<best.length)) best=p; }
   const target=best[best.length-1];
   agent.steps += best.length-1; agent.pos=target; agent.visited.add(target);
@@ -333,6 +339,78 @@ function goHome(why){
   const p=pathTo('1,1', agent.visited); agent.steps += p.length-1; agent.pos='1,1'; agent.done=true;
   agent.outcome = agent.hasGold ? 'escaped with gold' : 'climbed out empty-handed';
   logLine(`${why} walks back to (1,1) and climbs out (${p.length-1} step${p.length===2?'':'s'}).`); render();
+}
+
+// ---------- Probability rung: dsdk.prob's numbers (built into the page) and this page's own recomputation ----------
+const PIT_P = 0.2;
+let probMode = false;
+const rungCheck = { agree:0, disagree:0, missing:0 };
+const rungCache = new Map();
+const CR = () => (LAB.cave_rung && LAB.cave_rung.states) ? LAB.cave_rung : null;
+const toNum = (s) => { const [a,b]=s.split('/').map(Number); return a/b; };
+function stateKey(){
+  return [...agent.visited].sort((a,b)=>{ const [ax,ay]=parse(a),[bx,by]=parse(b); return ax-bx||ay-by; })
+    .map(k=>{ const [x,y]=parse(k), p=agent.percepts.get(k); return `${x}${y}${p.breeze?'B':'-'}${p.stench?'S':'-'}`; }).join(';');
+}
+// Independent recomputation by plain enumeration (no logic engine, no dsdk): pit patterns on the frontier, and the Wumpus on ANY unvisited square.
+function riskTable(){
+  const kk=stateKey(); if (rungCache.has(kk)) return rungCache.get(kk);
+  const fr=frontier(), vis=[...agent.visited], idx=new Map(fr.map((c,i)=>[c,i]));
+  const open=new Map(vis.map(v=>[v, nbrs(v).filter(n=>!agent.visited.has(n))]));
+  const pitW=fr.map(()=>0); let totP=0;
+  for (let m=0; m<(1<<fr.length); m++){
+    let ok=true; for (const v of vis){ const any=open.get(v).some(n=>(m>>idx.get(n))&1); if (any!==agent.percepts.get(v).breeze){ ok=false; break; } }
+    if (!ok) continue; let k=0; for (let i=0;i<fr.length;i++) k+=(m>>i)&1;
+    const w=Math.pow(PIT_P,k)*Math.pow(1-PIT_P,fr.length-k); totP+=w; for (let i=0;i<fr.length;i++) if ((m>>i)&1) pitW[i]+=w;
+  }
+  let consistent=0; const wc=fr.map(()=>0);
+  for (let y=1;y<=N;y++) for (let x=1;x<=N;x++){ const c=key(x,y); if (agent.visited.has(c)) continue;
+    if (vis.every(v=>agent.percepts.get(v).stench===nbrs(v).includes(c))){ consistent++; if (idx.has(c)) wc[idx.get(c)]++; } }
+  const rows=fr.map((c,i)=>{ const pit=pitW[i]/totP, wumpus=wc[i]/consistent; return { cell:c, name:c.replace(',',''), pit, wumpus, death:1-(1-pit)*(1-wumpus) }; });
+  const out={ rows, expected:rows.reduce((s,r)=>s+r.pit,0), key:kk };
+  rungCache.set(kk,out); return out;
+}
+// Compare this page's table with the one dsdk built into the page. Returns {status:'agree'|'disagree'|'missing'|'pending', dsdk}.
+function compareRung(rt){
+  const cr=CR(); if (!cr) return { status:'pending' };
+  const d=cr.states[rt.key]; if (!d) return { status:'missing' };
+  const ok = d.frontier.length===rt.rows.length && d.frontier.every((f,i)=>f[0]===rt.rows[i].name
+    && Math.abs(toNum(f[1])-rt.rows[i].pit)<1e-9 && Math.abs(toNum(f[2])-rt.rows[i].wumpus)<1e-9 && Math.abs(toNum(f[3])-rt.rows[i].death)<1e-9)
+    && Math.abs(toNum(d.expected_pits)-rt.expected)<1e-9;
+  return { status: ok?'agree':'disagree', dsdk:d };
+}
+function noteStuck(){ const rt=riskTable(), c=compareRung(rt); if (c.status in rungCheck) rungCheck[c.status]++; return rt; }
+function isStuck(){ return agent.outcome!=='died' && !agent.hasGold && frontier().length>0 && ![...verdicts.values()].some(v=>v.safe); }
+function gamble(){
+  const rt=noteStuck(), opts=rt.rows.filter(r=>r.death<1-1e-9);
+  if (!opts.length) return false;
+  let best=opts[0]; for (const r of opts) if (r.death<best.death-1e-9) best=r;
+  const target=best.cell, p=pathTo(target, agent.visited), risk=Math.round(best.death*100);
+  agent.steps += p.length-1; agent.pos=target; agent.gambles=(agent.gambles||0)+1;
+  if (cave.pits.has(target) || cave.wumpus===target){ agent.done=true; agent.outcome='died'; logLine(`Nothing was provable, so it gambled on (${target}), the least risky square (${risk}% chance of death), and died.`); render(); return true; }
+  agent.visited.add(target); const pc=percept(target); agent.percepts.set(target,pc);
+  logLine(`Nothing was provable, so it gambled on (${target}), the least risky square (${risk}% chance of death), and survived. Perceives ${describe(pc)}.`);
+  think(); render(); return true;
+}
+const pct = (v) => (100*v).toFixed(1)+'%';
+function renderRung(){
+  const box=$('#cave-rung'); box.replaceChildren();
+  if (!isStuck()) return;
+  const rt=riskTable(), cmp=compareRung(rt), least=Math.min(...rt.rows.map(r=>r.death));
+  box.append(el('h3',{text:'Probability rung: nothing here is provable'}),
+    el('p',{style:'margin:0',text:'Logic cannot clear any frontier square, so dsdk asks how likely each one is to hold a pit or the Wumpus. Pits are independent with prior 1/5 and the Wumpus is on one of the unvisited squares, equally likely; the percepts so far rule worlds out.'}));
+  const head=['Square','Pit','Wumpus','Death','dsdk says','Page recomputes'];
+  const tb=el('tbody'); rt.rows.forEach((r,i)=>{
+    const f=cmp.dsdk?cmp.dsdk.frontier[i]:null;
+    const rowOk = f && Math.abs(toNum(f[3])-r.death)<1e-9 && Math.abs(toNum(f[1])-r.pit)<1e-9 && Math.abs(toNum(f[2])-r.wumpus)<1e-9;
+    tb.append(el('tr',{},el('td',{text:`(${r.cell})${Math.abs(r.death-least)<1e-9?' least risky':''}`}),el('td',{text:pct(r.pit)}),el('td',{text:pct(r.wumpus)}),el('td',{text:pct(r.death)}),
+      el('td',{text:f?`${f[1]} · ${f[2]} · ${f[3]}`:'–'}), el('td',{class:'rung-check','data-agree':f?String(!!rowOk):'n/a',text:f?(rowOk?'agree':'DISAGREE'):'n/a'})));
+  });
+  const wrap=el('div',{class:'tablewrap'}); const tbl=el('table',{id:'rung-table'},el('thead',{},el('tr',{},...head.map(h=>el('th',{text:h})))),tb); wrap.append(tbl); box.append(wrap);
+  const note = cmp.status==='pending' ? 'dsdk has no numbers for this build yet (the probability-rung card has not landed), so only the page recomputation is shown.'
+    : cmp.status==='missing' ? 'This exact state was not precomputed by dsdk (it is outside the demo cave and seeds 1 to 300), so only the page recomputation is shown.'
+    : `Expected pits on the frontier: ${rt.expected.toFixed(3)} (dsdk: ${cmp.dsdk.expected_pits}). Whole state: ${cmp.status==='agree'?'agree':'DISAGREE'}.`;
+  box.append(el('p',{id:'rung-note',style:'margin:0',text:note}));
 }
 let selected=null;
 function cellState(k){
@@ -367,7 +445,7 @@ function render(){
   $('#cave-stats').replaceChildren(...[['Steps',agent.steps],['Visited',agent.visited.size+'/16'],['Frontier proved safe',`${proved}/${fr.length}`],['Gold',agent.hasGold?'carried':'not yet'],['Status',agent.done?agent.outcome:'exploring'],['Score',agent.done?score:'–']].map(([k,v])=>el('span',{},k+' ',el('b',{text:String(v)}))));
   const log=$('#cave-log'); log.replaceChildren(...agent.log.map(t=>el('li',{text:t}))); log.scrollTop=log.scrollHeight;
   $('#cave-step').disabled=agent.done; $('#cave-run').disabled=agent.done;
-  renderWhy();
+  renderWhy(); renderRung();
 }
 function renderWhy(){
   const w=$('#cave-why'); w.replaceChildren();
@@ -402,6 +480,7 @@ $('#cave-seed').addEventListener('change', ()=>{ $('#cave-pick').value='seed'; r
 $('#cave-step').addEventListener('click', step);
 $('#cave-run').addEventListener('click', ()=>{ let guard=64; while(!agent.done && guard--) step(); });
 $('#cave-reveal').addEventListener('change', render);
+$('#cave-prob').addEventListener('change', ()=>{ probMode=$('#cave-prob').checked; });
 function sweep(n){
   const keep={cave,agent,verdicts,selected}; quiet=true; let died=0, gold=0, empty=0, steps=0;
   try{
@@ -413,8 +492,23 @@ function sweep(n){
   } finally { quiet=false; ({cave,agent,verdicts,selected}=keep); }
   return {n,died,gold,empty,steps};
 }
-$('#sweep').addEventListener('click',()=>{ const t0=performance.now(), r=sweep(300), ms=Math.round(performance.now()-t0);
+$('#sweep').addEventListener('click',()=>{ const was=probMode; probMode=false; const t0=performance.now(), r=sweep(300), ms=Math.round(performance.now()-t0); probMode=was;
   $('#sweep-out').replaceChildren(...[['caves',r.n],['deaths',r.died],['escaped with gold',r.gold],['climbed out empty',r.empty],['time',ms+' ms']].map(([k,v])=>el('span',{},k+' ',el('b',{text:String(v)})))); });
+
+$('#sweep2').addEventListener('click',()=>{
+  const was=probMode; rungCheck.agree=rungCheck.disagree=rungCheck.missing=0; const res={};
+  try{ for (const [label,m] of [['logic',false],['probabilistic',true]]){ probMode=m; res[label]=sweep(300); } } finally { probMode=was; }
+  const cr=CR(), rows=[];
+  for (const [label,title] of [['logic','Logic-only agent'],['probabilistic','Probabilistic agent']]){
+    const r=res[label], d=cr&&cr.rates[label], same=d&&d.died===r.died&&d.gold===r.gold&&d.empty===r.empty;
+    rows.push(el('tr',{},el('td',{text:title}),el('td',{text:`${r.died} (${(100*r.died/r.n).toFixed(1)}%)`}),el('td',{text:`${r.gold} (${(100*r.gold/r.n).toFixed(1)}%)`}),el('td',{text:String(r.empty)}),
+      el('td',{text:d?`${d.died} / ${d.gold} / ${d.empty}`:'not built yet'}),el('td',{class:'rate-check','data-agree':d?String(!!same):'n/a',text:d?(same?'agree':'DISAGREE'):'n/a'})));
+  }
+  const tbl=el('table',{id:'rates-table'},el('thead',{},el('tr',{},...['Agent','Died','Escaped with gold','Climbed out empty','dsdk says (died / gold / empty)','Page recomputes'].map(h=>el('th',{text:h})))),el('tbody',{},...rows));
+  $('#sweep2-out').replaceChildren(el('div',{class:'tablewrap'},tbl),
+    el('p',{id:'stuck-check',style:'margin:6px 0 0',text:cr?`Stuck states met in the sweeps: ${rungCheck.agree} agree with dsdk's table, ${rungCheck.disagree} disagree, ${rungCheck.missing} not in the table.`:"dsdk's table of risk numbers is not built into this page yet, so the stuck states were not compared."}),
+    el('p',{style:'margin:6px 0 0;color:var(--muted)',text:'Both agents ran on the same 300 random caves. Gambling finds the gold more often and costs lives; the logic-only agent never dies. dsdk computed its columns when the page was built.'}));
+});
 
 // ---------- Build Observatory ----------
 function renderBuild(){

@@ -80,6 +80,18 @@ def build_stats() -> dict:
     return out
 
 
+def cave_rung() -> dict:
+    """The Logic Cave's probability rung, computed by dsdk: the risk table for every stuck state the logic-only or the probabilistic agent
+    reaches in the demo cave and seeds 1..300 (``dsdk.worlds.wumpus.lab_data``, which calls ``dsdk.prob.ask`` and ``expectation``), plus both
+    agents' outcome counts. The page recomputes every number itself and shows agree/disagree. A stub shows as 'pending', never as made-up numbers."""
+    from dsdk.worlds.wumpus import lab_data
+
+    try:
+        return lab_data()
+    except NotImplementedError:
+        return {"pending": "dsdk.worlds.wumpus is not implemented yet"}
+
+
 def limits() -> list[dict]:
     out = []
     for line in (ROOT / "ops/haiku-limits.md").read_text().splitlines():
@@ -118,7 +130,7 @@ def main() -> None:
     data = {
         "built_at": dt.datetime.now(dt.UTC).strftime("%Y-%m-%d %H:%M UTC"),
         "git_sha": sh("git", "rev-parse", "HEAD").decode().strip(),
-        "ledger": ledger(), "build_stats": build_stats(), "limits": limits(), "a1": a1(), "lostlands": lostlands(),
+        "ledger": ledger(), "build_stats": build_stats(), "cave_rung": cave_rung(), "limits": limits(), "a1": a1(), "lostlands": lostlands(),
         "claims": json.loads((ROOT / "lab/data/claims.json").read_text()),
         "stack": json.loads((ROOT / "lab/data/stack.json").read_text()),
     }
