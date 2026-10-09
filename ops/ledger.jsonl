@@ -31,3 +31,4 @@
 {"ts": 1791506966, "task": "T26", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 50, "tests_passed": 939, "tests_total": 939, "round": 8, "note": "W: import_graph; A5 complete"}
 {"ts": 1791506985, "task": "T12", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 35, "tests_passed": 67, "tests_total": 67, "round": 9, "note": "F: typecheck; concurrent same-file edit OK"}
 {"ts": 1791506985, "task": "T13", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 24, "tests_passed": 190, "tests_total": 190, "round": 9, "note": "F: step/classify/trace; concurrent same-file edit OK"}
+{"ts": 1791507011, "task": "T15", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 120, "tests_passed": 179, "tests_total": 179, "round": 9, "note": "F: formula parser, strict+relaxed+all_parses"}

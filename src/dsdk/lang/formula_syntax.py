@@ -54,7 +54,7 @@ Every canonical string is also accepted in relaxed mode and gives the same Formu
 """
 from __future__ import annotations
 
-from dsdk.logic import Formula
+from dsdk.logic import And, Const, Formula, Iff, Implies, Not, Or, Var
 
 from .errors import LexError, ParseError  # noqa: F401  (raised here)
 from .lexer import FORMULA_KEYWORDS, tokenize  # noqa: F401  (used by the implementation)
@@ -70,7 +70,10 @@ def parse_formula(text: str, *, relaxed: bool = False) -> Formula:
       under Python's default recursion limit: loop for left-associative chains and use at most 3 Python frames per
       nesting level, or use an explicit stack.
     """
-    raise NotImplementedError
+    toks = tokenize(text, FORMULA_KEYWORDS, keep_whitespace=True)
+    if relaxed:
+        return _parse_relaxed(text, [t for t in toks if t.kind != "WS"])
+    return _parse_strict(text, toks)
 
 
 def all_parses(text: str) -> list[Formula]:
@@ -87,4 +90,177 @@ def all_parses(text: str) -> list[Formula]:
     ``LexError`` for an illegal character. ``ParseError`` if the tokens are not ``atom (op atom)*`` (atoms are NAME, TRUE,
     FALSE) -- e.g. ``"a &"``, ``"~a"``, ``"(a)"``, ``""``.
     """
-    raise NotImplementedError
+    toks = tokenize(text, FORMULA_KEYWORDS)
+    atoms: list[Formula] = []
+    ops: list[type] = []
+    want_atom = True
+    for j, tok in enumerate(toks):
+        if want_atom:
+            if tok.kind not in _ATOM_KINDS:
+                raise _error(text, toks, j, _ATOM_KINDS)
+            atoms.append(_atom(tok))
+        else:
+            if tok.kind not in _OP_CLS:
+                raise _error(text, toks, j, _OP_KINDS)
+            ops.append(_OP_CLS[tok.kind])
+        want_atom = not want_atom
+    if want_atom:
+        raise _error(text, toks, len(toks), _ATOM_KINDS)
+
+    memo: dict[tuple[int, int], list[Formula]] = {}
+
+    def go(lo: int, hi: int) -> list[Formula]:
+        key = (lo, hi)
+        if key in memo:
+            return memo[key]
+        if lo == hi:
+            result = [atoms[lo]]
+        else:
+            result = []
+            for i in range(lo, hi):
+                cls = ops[i]
+                for left in go(lo, i):
+                    for right in go(i + 1, hi):
+                        result.append(cls(left, right))
+        memo[key] = result
+        return result
+
+    return list(go(0, len(atoms) - 1))
+
+
+# ---------------------------------------------------------------------------------------------- private helpers
+_ATOM_KINDS = frozenset({"NAME", "TRUE", "FALSE"})
+_OP_KINDS = frozenset({"AMP", "BAR", "ARROW", "IFF"})
+_OP_CLS: dict[str, type] = {"AMP": And, "BAR": Or, "ARROW": Implies, "IFF": Iff}
+_BIN_PREC = {"IFF": 1, "ARROW": 2, "BAR": 3, "AMP": 4}
+_RELAXED_OPERAND = frozenset({"LPAREN", "TILDE", "NAME", "TRUE", "FALSE"})
+_STRICT_F = frozenset({"LPAREN", "NAME", "TRUE", "FALSE"})
+_STRICT_L = _STRICT_F | {"TILDE"}
+
+
+def _atom(tok) -> Formula:
+    if tok.kind == "TRUE":
+        return Const(True)
+    if tok.kind == "FALSE":
+        return Const(False)
+    return Var(tok.text)
+
+
+def _error(text: str, toks: list, j: int, expected) -> ParseError:
+    """ParseError for token ``j`` (or end of input when ``j`` is past the last token)."""
+    if j < len(toks):
+        return ParseError(f"unexpected {toks[j].text!r}", toks[j].start, expected)
+    return ParseError("unexpected end of input", len(text), expected)
+
+
+def _parse_relaxed(text: str, toks: list) -> Formula:
+    parser = _RelaxedParser(text, toks)
+    formula = parser.expr(0)
+    if parser.pos < len(toks):
+        raise _error(text, toks, parser.pos, parser.after_set())
+    return formula
+
+
+class _RelaxedParser:
+    """Precedence climbing over WS-free tokens. Recursion is at most two Python frames per nesting level."""
+
+    def __init__(self, text: str, toks: list) -> None:
+        self.text = text
+        self.toks = toks
+        self.pos = 0
+        self.depth = 0  # number of currently open parentheses
+
+    def _kind(self) -> str | None:
+        return self.toks[self.pos].kind if self.pos < len(self.toks) else None
+
+    def after_set(self) -> frozenset[str]:
+        return _OP_KINDS | (frozenset({"RPAREN"}) if self.depth else frozenset({"END"}))
+
+    def prefix(self) -> Formula:
+        kind = self._kind()
+        if kind in _ATOM_KINDS:
+            tok = self.toks[self.pos]
+            self.pos += 1
+            return _atom(tok)
+        if kind == "TILDE":
+            self.pos += 1
+            return Not(self.expr(5))
+        if kind == "LPAREN":
+            self.pos += 1
+            self.depth += 1
+            inner = self.expr(0)
+            if self._kind() != "RPAREN":
+                raise _error(self.text, self.toks, self.pos, self.after_set())
+            self.pos += 1
+            self.depth -= 1
+            return inner
+        raise _error(self.text, self.toks, self.pos, _RELAXED_OPERAND)
+
+    def expr(self, min_prec: int) -> Formula:
+        left = self.prefix()
+        while True:
+            kind = self._kind()
+            prec = _BIN_PREC.get(kind) if kind is not None else None
+            if prec is None or prec < min_prec:
+                return left
+            self.pos += 1
+            right = self.expr(prec if kind == "ARROW" else prec + 1)
+            left = _OP_CLS[kind](left, right)
+
+
+def _parse_strict(text: str, toks: list) -> Formula:
+    """Explicit stack machine over the WS-including tokens (no recursion).
+
+    Frames: ``("not",)`` inside ``(~ ...)``; ``("left",)`` waiting for the left operand of ``(x op y)``;
+    ``("right", left, op_kind)`` waiting for the right operand.
+    """
+    n = len(toks)
+    stack: list[tuple] = []
+    i = 0
+    after_lparen = False
+    while True:
+        # ---- want a formula at toks[i]
+        lparen_ctx = after_lparen
+        after_lparen = False
+        kind = toks[i].kind if i < n else None
+        if kind in _ATOM_KINDS:
+            value = _atom(toks[i])
+            i += 1
+        elif kind == "LPAREN":
+            if i + 1 < n and toks[i + 1].kind == "TILDE":
+                stack.append(("not",))
+                i += 2
+            else:
+                stack.append(("left",))
+                i += 1
+                after_lparen = True
+            continue
+        else:
+            raise _error(text, toks, i, _STRICT_L if lparen_ctx else _STRICT_F)
+
+        # ---- a complete formula `value` is at hand
+        while True:
+            if not stack:
+                if i < n:
+                    raise _error(text, toks, i, frozenset({"END"}))
+                return value
+            top = stack[-1]
+            if top[0] == "left":
+                if i >= n or toks[i].kind != "WS" or toks[i].text != " ":
+                    raise _error(text, toks, i, frozenset({"WS"}))
+                if i + 1 >= n or toks[i + 1].kind not in _OP_KINDS:
+                    raise _error(text, toks, i + 1, _OP_KINDS)
+                op = toks[i + 1].kind
+                if i + 2 >= n or toks[i + 2].kind != "WS" or toks[i + 2].text != " ":
+                    raise _error(text, toks, i + 2, frozenset({"WS"}))
+                stack[-1] = ("right", value, op)
+                i += 3
+                break
+            if i >= n or toks[i].kind != "RPAREN":
+                raise _error(text, toks, i, frozenset({"RPAREN"}))
+            i += 1
+            stack.pop()
+            if top[0] == "not":
+                value = Not(value)
+            else:
+                value = _OP_CLS[top[2]](top[1], value)
