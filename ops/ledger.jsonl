@@ -39,3 +39,4 @@
 {"ts": 1791508074, "task": "T50", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 120, "tests_passed": 80, "tests_total": 80, "round": 11, "note": "W: Lost Lands loader"}
 {"ts": 1791508115, "task": "contract-probability", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 3000, "tests_passed": null, "tests_total": null, "round": null, "note": "F: 438 tests; Wumpus oracle met exactly; 49/52 planted bugs caught on reference, 3 survivors argued equivalent"}
 {"ts": 1791508123, "task": "T34", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 31, "tests_passed": 55, "tests_total": 55, "round": 12, "note": "F: sampling statistics; restricted implementer agent"}
+{"ts": 1791508131, "task": "T30", "model": "haiku", "attempt": 1, "outcome": "partial", "wall_s": 36, "tests_passed": 84, "tests_total": 85, "round": 12, "note": "F: contract gap - card omitted the error-class constructor its tests need; Haiku correctly stayed in scope"}

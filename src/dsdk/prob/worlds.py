@@ -40,7 +40,8 @@ class UnmodelledVariableError(ValueError):
     """A formula mentions variables that the belief does not range over. ``.names`` is the sorted tuple of the missing names."""
 
     def __init__(self, names: tuple[str, ...]) -> None:
-        raise NotImplementedError
+        self.names = tuple(names)
+        super().__init__(f"unmodelled variables: {', '.join(self.names)}")
 
 
 @dataclass(frozen=True)
