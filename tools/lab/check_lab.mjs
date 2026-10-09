@@ -25,5 +25,19 @@ const res = await p.evaluate(() => { let died=0, gold=0; const s=document.queryS
   for (let i=1;i<=300;i++){ pick.value='seed'; s.value=String(i); s.dispatchEvent(new Event('change')); let g=80; while(!document.querySelector('#cave-step').disabled && g--) document.querySelector('#cave-step').click();
     const st=document.querySelector('#cave-stats').textContent; if(/died/.test(st)) died++; if(/escaped with gold/.test(st)) gold++; }
   return {died, gold}; });
-console.log('sweep', JSON.stringify(res), 'errors', JSON.stringify(errs));
+console.log('sweep', JSON.stringify(res));
+// probability rung: both sweeps, dsdk's numbers vs the page's recomputation
+await p.click('#sweep2');
+const rates = await p.$$eval('#rates-table .rate-check', ts => ts.map(t => t.dataset.agree));
+const stuck = await p.$eval('#stuck-check', e => e.textContent);
+const rateRows = await p.$$eval('#rates-table tbody tr', rs => rs.map(r => r.textContent));
+await p.selectOption('#cave-pick','demo'); await p.check('#cave-prob'); await p.click('#cave-run');
+const cells = await p.$$eval('#rung-table .rung-check', ts => ts.map(t => t.dataset.agree));
+const demoLog = await p.$$eval('#cave-log li', ls => ls.map(l=>l.textContent));
+await p.screenshot({ path: `${out}-rung.png`, fullPage: true });
+console.log('rung rates', JSON.stringify(rates), JSON.stringify(rateRows));
+console.log('rung stuck', stuck);
+console.log('rung demo cells', JSON.stringify(cells));
+console.log('rung demo log tail', JSON.stringify(demoLog.slice(-3)));
+console.log('errors', JSON.stringify(errs));
 await b.close();

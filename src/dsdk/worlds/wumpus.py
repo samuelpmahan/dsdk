@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 
 from dsdk.core import Judgment, Status
-from dsdk.logic import entails
+from dsdk.logic import Not, Var, entails
 from dsdk.prob import ask, expectation, prior_belief
 from dsdk.lang import parse_formula
 
@@ -181,13 +181,48 @@ def stuck_risk(percepts: dict) -> Judgment:
     ``expected_pits == 0``. If the percepts are impossible (a zero-probability evidence, which no real cave produces) the answer is
     ``INVALID`` with the reason of the first failing ``ask``. ``TypeError`` if ``percepts`` is not a dict of cell -> Percept.
     """
-    raise NotImplementedError
+    if not isinstance(percepts, dict):
+        raise TypeError(f"percepts must be a dict of cell -> Percept, not {type(percepts).__name__}")
+    front = frontier(set(percepts))
+    if not front:
+        return Judgment(Status.KNOWN, StuckRisk((), Fraction(0)), "")
+    pit_sentences, wumpus_sentences = knowledge(percepts)
+    pit_text = conjunction(pit_sentences)
+    wumpus_text = conjunction(wumpus_sentences)
+    pit_belief = prior_belief({f"P{name(c)}": PIT_PRIOR for c in front})
+    wumpus_vars = [f"W{name(c)}" for c in front] + ["WR"]
+    exactly_one = [f"({' | '.join(wumpus_vars)})"]
+    for i, a in enumerate(wumpus_vars):
+        for b in wumpus_vars[i + 1:]:
+            exactly_one.append(f"~({a} & {b})")
+    wumpus_belief = prior_belief({}, parse_formula(" & ".join(exactly_one), relaxed=True))
+    rows: list[CellRisk] = []
+    for c in front:
+        pit = ask(pit_belief, f"P{name(c)}", pit_text)
+        if pit.status is not Status.KNOWN:
+            return Judgment(Status.INVALID, None, pit.reason)
+        wum = ask(wumpus_belief, f"W{name(c)}", wumpus_text)
+        if wum.status is not Status.KNOWN:
+            return Judgment(Status.INVALID, None, wum.reason)
+        death = 1 - (1 - pit.value) * (1 - wum.value)
+        rows.append(CellRisk(c, pit.value, wum.value, death))
+    expr = " + ".join(f"(if P{name(c)} then 1 else 0)" for c in front)
+    ex = expectation(pit_belief, expr, pit_text)
+    if ex.status is not Status.KNOWN:
+        return Judgment(Status.INVALID, None, ex.reason)
+    return Judgment(Status.KNOWN, StuckRisk(tuple(rows), ex.value), "")
 
 
 def provably_safe(percepts: dict) -> tuple[Cell, ...]:
     """Frontier squares that the knowledge base ENTAILS to be pit-free and Wumpus-free, by ``dsdk.logic.entails`` over the sentences parsed
     with ``dsdk.lang.parse_formula(relaxed=True)`` (the pit sentences decide pits and the Wumpus sentences decide the Wumpus), in ``(x, y)`` order."""
-    raise NotImplementedError
+    pit_formulas = [parse_formula(s, relaxed=True) for s in knowledge(percepts)[0]]
+    wumpus_formulas = [parse_formula(s, relaxed=True) for s in knowledge(percepts)[1]]
+    return tuple(
+        c
+        for c in frontier(set(percepts))
+        if entails(pit_formulas, Not(Var(f"P{name(c)}"))) and entails(wumpus_formulas, Not(Var(f"W{name(c)}")))
+    )
 
 
 @dataclass(frozen=True)
@@ -209,7 +244,36 @@ def run_agent(cave: Cave, *, probabilistic: bool = False) -> AgentRun:
        entering a pit or the Wumpus square ends the run with ``"died"``, otherwise the square is visited and the loop continues; if none remain it
        leaves empty-handed.
     ``stuck`` holds a copy of the percepts dict at each stuck moment (cell -> Percept)."""
-    raise NotImplementedError
+    percepts: dict = {START: percept(cave, START, False)}
+    here = START
+    has_gold = False
+    stuck: list[dict] = []
+    gambles: list[Cell] = []
+    while True:
+        if percepts[here].glitter and not has_gold:
+            has_gold = True
+        if has_gold:
+            return AgentRun("escaped with gold", tuple(stuck), tuple(gambles))
+        safe = provably_safe(percepts)
+        if safe:
+            here = safe[0]
+            percepts[here] = percept(cave, here, has_gold)
+            continue
+        stuck.append(dict(percepts))
+        if not probabilistic:
+            return AgentRun("climbed out empty-handed", tuple(stuck), tuple(gambles))
+        risk = stuck_risk(percepts)
+        if risk.status is not Status.KNOWN:
+            raise RuntimeError(risk.reason)
+        options = [r for r in risk.value.frontier if r.death != 1]
+        if not options:
+            return AgentRun("climbed out empty-handed", tuple(stuck), tuple(gambles))
+        best = min(options, key=lambda r: (r.death, r.cell))
+        gambles.append(best.cell)
+        here = best.cell
+        if here in cave.pits or here == cave.wumpus:
+            return AgentRun("died", tuple(stuck), tuple(gambles))
+        percepts[here] = percept(cave, here, has_gold)
 
 
 @dataclass(frozen=True)
@@ -222,11 +286,21 @@ class Rates:
 
 def sweep_rates(seeds, *, probabilistic: bool) -> Rates:
     """Outcome counts over ``seeded_cave(s)`` for each seed: how many died, escaped with gold, climbed out empty-handed."""
-    raise NotImplementedError
+    caves = died = gold = empty = 0
+    for s in seeds:
+        caves += 1
+        outcome = run_agent(seeded_cave(s), probabilistic=probabilistic).outcome
+        if outcome == "died":
+            died += 1
+        elif outcome == "escaped with gold":
+            gold += 1
+        else:
+            empty += 1
+    return Rates(caves, died, gold, empty)
 
 
 def frac(x: Fraction) -> str:
-    raise NotImplementedError
+    return f"{x.numerator}/{x.denominator}"
 
 
 def lab_data(seeds=range(1, 301)) -> dict:
@@ -236,4 +310,22 @@ def lab_data(seeds=range(1, 301)) -> dict:
     with every fraction as ``"numerator/denominator"`` text. ``states`` holds one entry for every stuck state (``state_key`` of the stuck percepts) reached by
     EITHER agent on the demo cave and on ``seeded_cave(s)`` for each seed, deduplicated by key; each entry is :func:`stuck_risk` of that state. ``rates`` has
     ``{"caves", "died", "gold", "empty"}`` over ``seeds`` for the logic-only and the probabilistic agent (:func:`sweep_rates`)."""
-    raise NotImplementedError
+    states: dict = {}
+    for cave in [demo_cave()] + [seeded_cave(s) for s in seeds]:
+        for prob in (False, True):
+            for st in run_agent(cave, probabilistic=prob).stuck:
+                key = state_key(st)
+                if key in states:
+                    continue
+                risk = stuck_risk(st)
+                if risk.status is not Status.KNOWN:
+                    raise RuntimeError(risk.reason)
+                states[key] = {
+                    "frontier": [[name(r.cell), frac(r.pit), frac(r.wumpus), frac(r.death)] for r in risk.value.frontier],
+                    "expected_pits": frac(risk.value.expected_pits),
+                }
+    rates = {}
+    for label, prob in (("logic", False), ("probabilistic", True)):
+        r = sweep_rates(seeds, probabilistic=prob)
+        rates[label] = {"caves": r.caves, "died": r.died, "gold": r.gold, "empty": r.empty}
+    return {"pit_prior": frac(PIT_PRIOR), "states": states, "rates": rates}

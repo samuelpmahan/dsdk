@@ -29,7 +29,6 @@ min_imports = 2
 track = "W1"
 order = 5
 min_imports = 2
-thin_owed = "worlds networks must be built with dsdk.graph and fitted with dsdk.prob (cards written, held on the data-source decision)"
 
 [packages."dsdk.prob"]
 track = "A3"
