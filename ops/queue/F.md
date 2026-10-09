@@ -87,3 +87,11 @@ Stub, 53 tests and export are in place. The tests pin 5/10, 0/10 and 33/35, chec
 | any | ops/tasks/T63-prob-expectation-calc.md | tests/integration/test_prob_expectation.py | none | `expectation(belief, calc_text, given_text=None)` and `sample_expectation` in `src/dsdk/prob/expect.py`: Calc text parsed, type-checked, evaluated per world with the bridge's `bind_assignment`, averaged exactly; INVALID for parse/type/non-Int problems, UNKNOWN for unmodelled variables |
 
 Stub, 34 tests and exports are in place. This makes `parse_calc`, `free_vars`, `typecheck`, `to_source`, `evaluate` and `bridge.bind_assignment` of the language package called by a later layer. When it passes, tracks.toml needs no further change for lang (the formula-text card already pays that debt).
+
+## Logic on the kernel: proofs recorded as Parts (promoted dream, 2026-10-09)
+
+| Wave | Card file | Done command (tests) | Depends | What it builds |
+|---|---|---|---|---|
+| any | ops/tasks/T64-logic-record-proof.md | tests/logic/test_recorded.py tests/integration/test_proof_lineage.py | none | `record_proof` and `replay_proof` in `src/dsdk/logic/recorded.py`: one composed Part per proof step inside one tick (inputs are exactly the cited Parts), rolled back with FAILED receipts when the checker rejects; replay rebuilds and re-checks the proof from the lineage |
+
+Stub, 40 logic tests, 12 integration tests (lineage graph = citation graph, graph-package witness proofs recorded and replayed) and the exports in `dsdk.logic` are in place. The logic module calls only dsdk.core (layer rule); the graph-using tests are in tests/integration.
