@@ -36,3 +36,8 @@ Test file sizes: all of tests/worlds takes ~30 s. Haiku must NOT edit tests/worl
   Adds only two functions to the verified buildlog.py. Needs no Lost Lands data decision. When it passes, tests/test_stack.py's strict
   waiver "prob owed to worlds" flips (xpass-strict), and Opus removes it. tools/lab/build_lab.py already calls these functions: until the
   card lands the Lab shows "waiting for dsdk" for the first-try tiles; after, it shows dsdk's numbers plus "page recomputes: agree".
+
+## READY (Opus, 2026-10-09): the probability rung for the Logic Cave (two cards, no data decision needed)
+- [T56] ops/tasks/T56-worlds-wumpus-caves.md   done: `.venv/bin/python -m pytest tests/worlds/test_worlds_wumpus.py -q -k "random_stream or demo_cave_is or seeded_caves or neighbours or percepts_in_the_demo or frontier_is or knowledge_sentences or square_without or state_key"`
+- [T57] ops/tasks/T57-worlds-wumpus-rung.md    done: `.venv/bin/python -m pytest tests/worlds/test_worlds_wumpus.py -q`   (after T56; same file)
+  tools/lab/build_lab.py calls dsdk.worlds.wumpus.lab_data(); until T57 lands the Lab shows the pending state.
