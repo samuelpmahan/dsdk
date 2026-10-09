@@ -1,0 +1,8 @@
+# Free gold: what "exactly one Wumpus" proves that logic alone does not
+kind: hypothesis
+idea: The logic agent's knowledge base never says there is exactly one Wumpus, but the probability model does. So some squares have chance of death exactly 0 although logic cannot prove them safe. List those squares per stuck state, let the agent step on them (zero risk, no gamble), and count the extra gold. Then add the missing sentence to the logic knowledge base and check that entailment alone now proves the same squares, closing the gap between the two rungs.
+why it's interesting: It tests a sharp claim: probability zero should coincide with provable safety once both sides share the same assumptions. If it does, the Lab can show the two rungs agreeing; if it does not, we have found a modelling difference worth a proof. It also pays off a mild unfairness in the current comparison (the logic agent is handicapped by a missing rule).
+smallest experiment: For seeds 1 to 300 collect stuck states where some frontier square has death 0; count them; rerun the logic agent with "exactly one Wumpus" added as sentences (pairwise exclusion plus the disjunction) and compare outcomes; assert zero-probability squares equal provably safe squares.
+reuses: dsdk.worlds.wumpus.stuck_risk and provably_safe; dsdk.logic.entails; dsdk.lang.parse_formula; dsdk.prob.ask for the zero test
+probe: A risk-limited agent with limit 0 found gold in 79 of 300 caves while the logic-only agent found it in 71, with no deaths in either: 8 extra golds come from squares with probability exactly 0 that logic did not prove. Same read-only sweep as the other entry.
+score: surprise=4 cost=2 reuse=4
