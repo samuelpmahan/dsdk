@@ -40,14 +40,25 @@ def two_hop_join(
     rows, so ``records = [a->b, a->b, b->c]`` gives ``[(a, c), (a, c)]``. A record missing ``source`` or ``target``
     raises :class:`GraphError`. Empty input gives ``[]``.
     """
-    raise NotImplementedError
+    pairs: list[Pair] = []
+    keyed: list[tuple[Hashable, Hashable]] = []
+    for record in records:
+        try:
+            keyed.append((record[source], record[target]))
+        except KeyError as exc:
+            raise GraphError(f"record {record!r} is missing key {exc.args[0]!r}") from exc
+    for r1_source, r1_target in keyed:
+        for r2_source, r2_target in keyed:
+            if r1_target == r2_source:
+                pairs.append((r1_source, r2_target))
+    return pairs
 
 
 def two_hop_pairs(
     records: Sequence[Mapping[str, Any]], source: str = "source", target: str = "target"
 ) -> frozenset[Pair]:
     """``DISTINCT`` of :func:`two_hop_join`: the SET of pairs ``(a, c)`` joined by at least one middle node."""
-    raise NotImplementedError
+    return frozenset(two_hop_join(records, source, target))
 
 
 def two_hop_pairs_graph(g: Graph) -> frozenset[Pair]:
@@ -55,17 +66,32 @@ def two_hop_pairs_graph(g: Graph) -> frozenset[Pair]:
 
     On ``Graph.from_records(records)`` (directed) this equals ``two_hop_pairs(records)`` for every list of
     records, duplicates or not."""
-    raise NotImplementedError
+    return frozenset((a, c) for a in g.nodes for b in g.neighbors(a) for c in g.neighbors(b))
 
 
 def two_hop_counts_graph(g: Graph) -> dict[Pair, int]:
     """``{(a, c): number of DISTINCT middle nodes b}`` for every pair with at least one. This is the nonzero part
     of the square of ``g.adjacency_matrix()``. Differs from ``Counter(two_hop_join(records))`` exactly when some
     record is duplicated."""
-    raise NotImplementedError
+    matrix = two_hop_matrix(g)
+    nodes = g.nodes
+    return {
+        (nodes[i], nodes[j]): count
+        for i, row in enumerate(matrix)
+        for j, count in enumerate(row)
+        if count
+    }
 
 
 def two_hop_matrix(g: Graph) -> tuple[tuple[int, ...], ...]:
     """The matrix product ``A @ A`` of ``g.adjacency_matrix()`` with itself, computed with plain loops (rows and
     columns in node order). Entry ``[i][j]`` equals ``two_hop_counts_graph(g).get((nodes[i], nodes[j]), 0)``."""
-    raise NotImplementedError
+    a = g.adjacency_matrix()
+    n = len(a)
+    result: list[list[int]] = [[0] * n for _ in range(n)]
+    for i in range(n):
+        for k in range(n):
+            if a[i][k]:
+                for j in range(n):
+                    result[i][j] += a[i][k] * a[k][j]
+    return tuple(tuple(row) for row in result)

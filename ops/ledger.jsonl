@@ -18,3 +18,5 @@
 {"ts": 1791505765, "task": "T20", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 74, "tests_passed": 69, "tests_total": 69, "round": 6, "note": ""}
 {"ts": 1791505765, "task": "reaudit-A1", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 134, "tests_passed": null, "tests_total": null, "round": null, "note": "P1,P3 SOUND; P2 gaps N1-N6; N2 is a real code bug"}
 {"ts": 1791505815, "task": "T27", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 120, "tests_passed": 473, "tests_total": 473, "round": 6, "note": "first pytest hit a venv race (pluggy missing) under concurrent uv run"}
+{"ts": 1791505827, "task": "T21", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 33, "tests_passed": 26, "tests_total": 26, "round": 6, "note": ""}
+{"ts": 1791505827, "task": "T24", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 20, "tests_passed": 13, "tests_total": 13, "round": 6, "note": ""}

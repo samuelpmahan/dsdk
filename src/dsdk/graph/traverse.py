@@ -21,6 +21,7 @@ a-b twice); the shortest undirected cycles are self-loops and triangles (``k >= 
 """
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from typing import Hashable
 
@@ -63,7 +64,20 @@ def bfs(g: Graph, source: Hashable) -> BFSResult:
     Directed graphs follow edge direction; undirected graphs go both ways.
     ``MissingNodeError`` if ``source`` is not a node. An isolated source gives distance ``{source: 0}``.
     """
-    raise NotImplementedError
+    g.index_of(source)
+    distance: dict[Hashable, int] = {source: 0}
+    parent: dict[Hashable, Hashable | None] = {source: None}
+    order: list[Hashable] = []
+    queue: deque[Hashable] = deque([source])
+    while queue:
+        u = queue.popleft()
+        order.append(u)
+        for v in g.neighbors(u):
+            if v not in distance:
+                distance[v] = distance[u] + 1
+                parent[v] = u
+                queue.append(v)
+    return BFSResult(source, distance, parent, tuple(order))
 
 
 def shortest_path(g: Graph, source: Hashable, target: Hashable) -> tuple[Hashable, ...] | None:
@@ -75,7 +89,20 @@ def shortest_path(g: Graph, source: Hashable, target: Hashable) -> tuple[Hashabl
     ``(source,)`` (the empty walk) even if the node has a self-loop. ``MissingNodeError`` if either node is
     absent. Every consecutive pair of the result is an edge of ``g`` and ``len(path) - 1 == distance``.
     """
-    raise NotImplementedError
+    g.index_of(source)
+    g.index_of(target)
+    parent = bfs(g, source).parent
+    if target not in parent:
+        return None
+    path: list[Hashable] = []
+    node = target
+    while True:
+        path.append(node)
+        if node == source:
+            break
+        node = parent[node]
+    path.reverse()
+    return tuple(path)
 
 
 def dfs_preorder(g: Graph, source: Hashable | None = None) -> tuple[Hashable, ...]:
@@ -88,13 +115,49 @@ def dfs_preorder(g: Graph, source: Hashable | None = None) -> tuple[Hashable, ..
     The explicit stack must resume each node's neighbour iteration where it left off (push ``(node, iterator)``);
     pushing all neighbours at once gives a DIFFERENT order and is wrong. ``MissingNodeError`` for a bad source.
     """
-    raise NotImplementedError
+    return _dfs_orders(g, source)[0]
 
 
 def dfs_postorder(g: Graph, source: Hashable | None = None) -> tuple[Hashable, ...]:
     """Same traversal as :func:`dfs_preorder`, but a node is appended when ``visit`` of it FINISHES (after all
     its recursive calls). Used by :func:`strongly_connected_components`."""
-    raise NotImplementedError
+    return _dfs_orders(g, source)[1]
+
+
+def _dfs_orders(g: Graph, source: Hashable | None) -> tuple[tuple[Hashable, ...], tuple[Hashable, ...]]:
+    """Iterative DFS shared by preorder and postorder. Returns ``(preorder, postorder)``.
+
+    Each stack frame is ``(node, iterator over g.neighbors(node))``; the top frame advances to its next unmarked
+    neighbour, which is marked, emitted in preorder and pushed. An exhausted frame is popped and emitted in
+    postorder. This reproduces the recursive ``visit`` exactly without recursion.
+    """
+    if source is not None:
+        g.index_of(source)
+        roots: tuple[Hashable, ...] = (source,)
+    else:
+        roots = g.nodes
+
+    marked: set[Hashable] = set()
+    pre: list[Hashable] = []
+    post: list[Hashable] = []
+    for root in roots:
+        if root in marked:
+            continue
+        marked.add(root)
+        pre.append(root)
+        stack = [(root, iter(g.neighbors(root)))]
+        while stack:
+            node, neighbours = stack[-1]
+            for v in neighbours:
+                if v not in marked:
+                    marked.add(v)
+                    pre.append(v)
+                    stack.append((v, iter(g.neighbors(v))))
+                    break
+            else:
+                stack.pop()
+                post.append(node)
+    return tuple(pre), tuple(post)
 
 
 def find_cycle(g: Graph) -> tuple[Hashable, ...] | None:
