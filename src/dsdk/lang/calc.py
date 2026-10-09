@@ -362,6 +362,61 @@ def parse_calc(text: str) -> Expr:
 
 
 # ----------------------------------------------------------------------------- typing
+class _IllTyped(Exception):
+    """Internal: carries the INVALID reason out of :func:`_check`."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _fail(tag: str, node: Expr) -> _IllTyped:
+    return _IllTyped(f"{tag}: {to_source(node)}")
+
+
+def _check(e: Expr, env: dict[str, Type]) -> Type:
+    """Type of ``e`` in ``env`` (never mutated). Children are typed first, left to right; then the node's own rule."""
+    if isinstance(e, IntLit):
+        return Type.INT
+    if isinstance(e, BoolLit):
+        return Type.BOOL
+    if isinstance(e, Var):
+        if e.name not in env:
+            raise _fail("unbound variable", e)
+        return env[e.name]
+    if isinstance(e, BinOp):
+        lt = _check(e.left, env)
+        rt = _check(e.right, env)
+        if e.op in ("+", "-", "*", "<"):
+            if lt is not Type.INT or rt is not Type.INT:
+                raise _fail("operand type mismatch", e)
+            return Type.BOOL if e.op == "<" else Type.INT
+        if e.op == "==":
+            if lt is not rt:
+                raise _fail("operand type mismatch", e)
+            return Type.BOOL
+        # and / or
+        if lt is not Type.BOOL or rt is not Type.BOOL:
+            raise _fail("operand type mismatch", e)
+        return Type.BOOL
+    if isinstance(e, Not):
+        if _check(e.operand, env) is not Type.BOOL:
+            raise _fail("operand type mismatch", e)
+        return Type.BOOL
+    if isinstance(e, If):
+        ct = _check(e.cond, env)
+        tt = _check(e.then, env)
+        et = _check(e.orelse, env)
+        if ct is not Type.BOOL:
+            raise _fail("condition not Bool", e)
+        if tt is not et:
+            raise _fail("branch type mismatch", e)
+        return tt
+    # Let: the body sees the binder in a fresh copy of the environment (no leak to siblings or the caller).
+    bt = _check(e.bound, env)
+    return _check(e.body, {**env, e.name: bt})
+
+
 def typecheck(e: Expr, env: Mapping[str, Type] | None = None) -> Judgment:
     """Static type of ``e`` under ``env`` (``None`` = empty; never mutated).
 
@@ -369,26 +424,91 @@ def typecheck(e: Expr, env: Mapping[str, Type] | None = None) -> Judgment:
     with ``reason == f"{tag}: {to_source(node)}"`` as specified in the module docstring. Never raises for an ill-typed
     program (that is what INVALID is for); ``TypeError`` only if ``e`` is not an Expr.
     """
-    raise NotImplementedError
+    _require_expr(e)
+    try:
+        ty = _check(e, dict(env) if env is not None else {})
+    except _IllTyped as exc:
+        return Judgment(Status.INVALID, None, exc.reason)
+    return Judgment(Status.KNOWN, ty)
 
 
 # ----------------------------------------------------------------------------- semantics
 def step(e: Expr) -> Expr | None:
     """One small-step reduction per the exact rules in the module docstring, or ``None`` if ``e`` is a value or stuck.
     ``TypeError`` for a non-Expr."""
-    raise NotImplementedError
+    _require_expr(e)
+    if isinstance(e, BinOp):
+        if e.op in ("and", "or"):
+            if not is_value(e.left):
+                nl = step(e.left)
+                return None if nl is None else BinOp(e.op, nl, e.right)
+            if not isinstance(e.left, BoolLit):
+                return None
+            if e.op == "and":
+                return e.right if e.left.value else BoolLit(False)
+            return BoolLit(True) if e.left.value else e.right
+        if not is_value(e.left):
+            nl = step(e.left)
+            return None if nl is None else BinOp(e.op, nl, e.right)
+        if not is_value(e.right):
+            nr = step(e.right)
+            return None if nr is None else BinOp(e.op, e.left, nr)
+        l, r = e.left, e.right
+        if isinstance(l, IntLit) and isinstance(r, IntLit):
+            if e.op == "+":
+                return IntLit(l.value + r.value)
+            if e.op == "-":
+                return IntLit(l.value - r.value)
+            if e.op == "*":
+                return IntLit(l.value * r.value)
+            if e.op == "<":
+                return BoolLit(l.value < r.value)
+            if e.op == "==":
+                return BoolLit(l.value == r.value)
+            return None
+        if isinstance(l, BoolLit) and isinstance(r, BoolLit) and e.op == "==":
+            return BoolLit(l.value == r.value)
+        return None
+    if isinstance(e, Not):
+        if not is_value(e.operand):
+            no = step(e.operand)
+            return None if no is None else Not(no)
+        if isinstance(e.operand, BoolLit):
+            return BoolLit(not e.operand.value)
+        return None
+    if isinstance(e, If):
+        if not is_value(e.cond):
+            nc = step(e.cond)
+            return None if nc is None else If(nc, e.then, e.orelse)
+        if isinstance(e.cond, BoolLit):
+            return e.then if e.cond.value else e.orelse
+        return None
+    if isinstance(e, Let):
+        if not is_value(e.bound):
+            nb = step(e.bound)
+            return None if nb is None else Let(e.name, nb, e.body)
+        return substitute(e.body, e.name, e.bound)
+    return None
 
 
 def classify(e: Expr) -> Outcome:
     """``Outcome.VALUE`` if ``is_value(e)``; else ``Outcome.STEP`` if ``step(e) is not None``; else ``Outcome.STUCK``."""
-    raise NotImplementedError
+    if is_value(e):
+        return Outcome.VALUE
+    return Outcome.STEP if step(e) is not None else Outcome.STUCK
 
 
 def trace(e: Expr) -> list[Expr]:
     """``[e0, e1, ..., en]`` with ``e0 == e``, ``e(i+1) == step(e(i))`` and ``step(en) is None``. So ``len(trace(e)) - 1`` is
     the number of steps; the last element is a value or a stuck term (use :func:`classify`); a value gives ``[e]``.
     Never raises StuckError. ``TypeError`` for a non-Expr."""
-    raise NotImplementedError
+    _require_expr(e)
+    out = [e]
+    while True:
+        nxt = step(out[-1])
+        if nxt is None:
+            return out
+        out.append(nxt)
 
 
 def evaluate(e: Expr) -> int | bool:
