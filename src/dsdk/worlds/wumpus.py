@@ -53,12 +53,21 @@ OUTCOMES = ("died", "escaped with gold", "climbed out empty-handed")
 
 
 def imul(a: int, b: int) -> int:
-    raise NotImplementedError
+    return (a * b) & 0xFFFFFFFF
 
 
 def mulberry32(seed: int):
     """The generator of the page (a 32-bit mulberry32): returns a function that gives floats in [0, 1) exactly as the JavaScript does."""
-    raise NotImplementedError
+    state = seed & 0xFFFFFFFF
+
+    def rng() -> float:
+        nonlocal state
+        state = (state + 0x6D2B79F5) & 0xFFFFFFFF
+        t = imul(state ^ (state >> 15), 1 | state)
+        t = ((t + imul(t ^ (t >> 7), 61 | t)) & 0xFFFFFFFF) ^ t
+        return ((t ^ (t >> 14)) & 0xFFFFFFFF) / 4294967296
+
+    return rng
 
 
 @dataclass(frozen=True)
@@ -70,15 +79,22 @@ class Cave:
 
 
 def demo_cave() -> Cave:
-    raise NotImplementedError
+    return Cave("Demo cave", frozenset({(3, 1), (1, 3), (3, 4)}), (4, 4), (3, 3))
 
 
 def seeded_cave(seed: int) -> Cave:
-    raise NotImplementedError
+    rng = mulberry32(seed)
+    cells = [(x, y) for y in range(1, SIZE + 1) for x in range(1, SIZE + 1) if (x, y) != START]
+    pits = frozenset(c for c in cells if rng() < 0.2)
+    wumpus = cells[math.floor(rng() * len(cells))]
+    gold = cells[math.floor(rng() * len(cells))]
+    return Cave(f"Random cave #{seed}", pits, wumpus, gold)
 
 
 def neighbours(cell: Cell) -> tuple[Cell, ...]:
-    raise NotImplementedError
+    x, y = cell
+    candidates = ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+    return tuple(sorted(c for c in candidates if 1 <= c[0] <= SIZE and 1 <= c[1] <= SIZE))
 
 
 @dataclass(frozen=True)
@@ -89,29 +105,54 @@ class Percept:
 
 
 def percept(cave: Cave, cell: Cell, has_gold: bool) -> Percept:
-    raise NotImplementedError
+    near = neighbours(cell)
+    breeze = any(n in cave.pits for n in near)
+    stench = cave.wumpus == cell or cave.wumpus in near
+    glitter = cave.gold == cell and not has_gold
+    return Percept(breeze, stench, glitter)
 
 
 def name(cell: Cell) -> str:
-    raise NotImplementedError
+    return f"{cell[0]}{cell[1]}"
 
 
 def frontier(visited) -> tuple[Cell, ...]:
-    raise NotImplementedError
+    seen = set(visited)
+    out = {n for v in seen for n in neighbours(v) if n not in seen}
+    return tuple(sorted(out))
 
 
 def knowledge(percepts: dict) -> tuple[list[str], list[str]]:
     """(pit sentences, Wumpus sentences) for the visited squares in ``percepts`` (``{cell: Percept}``), as described in the module docstring."""
-    raise NotImplementedError
+    pit_sentences: list[str] = []
+    wumpus_sentences: list[str] = []
+    for v in sorted(percepts):
+        p = percepts[v]
+        open_cells = [n for n in neighbours(v) if n not in percepts]
+        if p.breeze:
+            if open_cells:
+                pit_sentences.append(" | ".join(f"P{name(n)}" for n in open_cells))
+        else:
+            pit_sentences.extend(f"~P{name(n)}" for n in open_cells)
+        if p.stench:
+            if open_cells:
+                wumpus_sentences.append(" | ".join(f"W{name(n)}" for n in open_cells))
+        else:
+            wumpus_sentences.extend(f"~W{name(n)}" for n in open_cells)
+    return pit_sentences, wumpus_sentences
 
 
 def conjunction(sentences: list[str]) -> str:
-    raise NotImplementedError
+    if not sentences:
+        return "true"
+    return " & ".join(f"({s})" for s in sentences)
 
 
 def state_key(percepts: dict) -> str:
     """Canonical text of a knowledge state: for each visited square in ``(x, y)`` order ``f"{x}{y}{B or -}{S or -}"`` joined by ``";"``."""
-    raise NotImplementedError
+    return ";".join(
+        f"{name(c)}{'B' if p.breeze else '-'}{'S' if p.stench else '-'}" for c, p in sorted(percepts.items())
+    )
 
 
 @dataclass(frozen=True)
