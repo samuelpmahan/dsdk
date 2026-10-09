@@ -93,6 +93,28 @@ th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:up
 .bignum{display:flex;flex-wrap:wrap;gap:8px 26px;font-family:var(--mono);font-size:13px;color:var(--muted)}
 .bignum b{display:block;font-family:var(--display);font-size:30px;color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums}
 footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 18px}
+
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tabs button[aria-selected=true]{background:var(--amber);color:#1b1408;border-color:var(--amber);font-weight:700}
+.bench-sum{margin:0;max-width:75ch;font-size:16px}
+.bench-sum b{color:var(--amber)}
+.bench-cols{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:860px){.bench-cols{grid-template-columns:minmax(0,1fr)}}
+.clause{border:1px solid var(--rule);border-radius:4px;background:var(--rack)}
+.clause>summary{cursor:pointer;padding:8px 12px;display:flex;justify-content:space-between;gap:12px;font-weight:700}
+.clause>summary .n{font-family:var(--mono);font-size:12px;color:var(--muted);font-weight:400;white-space:nowrap}
+.claims{list-style:none;margin:0;padding:0 12px 10px;display:grid;gap:8px}
+.claims li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 8px;font-size:14px}
+.claims .mk{font-family:var(--mono);font-weight:600}
+.claims .where{grid-column:2;font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.claims .where a{color:var(--muted)}
+.bug{border-left:3px solid var(--rule);padding:6px 10px;display:grid;gap:3px;font-size:14px;background:var(--rack)}
+.bug.survived{border-left-color:var(--amber)}
+.bug.killed{border-left-color:var(--safe)}
+.bug code{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
+.bug .where{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.buglist{display:grid;gap:6px;max-height:520px;overflow:auto}
+.groupscroll{display:grid;gap:8px;max-height:640px;overflow:auto;padding-right:4px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
@@ -148,6 +170,22 @@ footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;fl
         <dl class="ev" id="ev-a1"></dl>
       </div>
     </details>
+  </section>
+
+
+  <!-- ============ Proof Bench ============ -->
+  <section class="instrument" id="bench" aria-labelledby="bench-h">
+    <div class="face"><h2 id="bench-h">Proof Bench</h2><span class="meta">Every claim behind every instrument</span></div>
+    <div class="surface">
+      <p class="lede">What the code is claimed to do, in plain words, with where to check each claim. Below that are the bugs we deliberately planted in the shipped code and whether a test caught each one. A passing test only counts if it would have failed on a wrong implementation, so the planted bugs are the real evidence.</p>
+      <div class="tabs" role="tablist" id="bench-tabs" aria-label="Part of dsdk"></div>
+      <p class="bench-sum" id="bench-sum"></p>
+      <div class="controls"><label class="inline" for="bench-q">Search claims <input id="bench-q" type="search" placeholder="e.g. cycle, unknown, precedence" style="width:18em"></label><span id="bench-count" class="stats"></span></div>
+      <div class="bench-cols">
+        <div><h3 style="font-size:20px;margin-bottom:6px">Claims, grouped by what they cover</h3><div class="groupscroll" id="bench-claims"></div></div>
+        <div><h3 style="font-size:20px;margin-bottom:6px">Planted bugs</h3><p class="lede" style="font-size:14px" id="bench-mut-sum"></p><div class="buglist" id="bench-bugs"></div></div>
+      </div>
+    </div>
   </section>
 
   <!-- ============ The build ============ -->
@@ -400,5 +438,61 @@ function renderEvidence(){
   $('#foot').replaceChildren(el('span',{text:'Built '+LAB.built_at}), el('span',{text:'commit '+LAB.git_sha.slice(0,12)}), el('span',{text:'branch claude/friendly-cray-zex2o8'}), el('a',{href:'https://github.com/samuelpmahan/dsdk/tree/claude/friendly-cray-zex2o8',text:'source'}));
 }
 
-renderEvidence(); renderBuild(); resetCave();
+
+// ---------- Proof Bench ----------
+const TRACK_NAMES = {'dsdk.core':'Kernel','dsdk.logic':'Logic','dsdk.lang':'Language','dsdk.graph':'Graphs'};
+const PROOF_NOTES = {
+  'dsdk.logic':'Written proofs: the sum formula and "mirroring a tree twice gives it back" were each audited twice by an agent that did not write them. Both are sound; the gaps the first audit found were closed and re-checked by tracing the real code over 988 loop states.',
+  'dsdk.lang':'Written proofs (type preservation, termination of evaluation) are being audited now by the other manager.',
+  'dsdk.graph':'Written proofs (BFS finds shortest paths, topological sort terminates) are being audited now by the other manager.',
+  'dsdk.core':'No written proofs; the kernel is specified by its tests.'};
+let benchTrack = 'dsdk.lang';
+function link(href, text){ const a=el('a',{href,target:'_blank',rel:'noopener'}); a.textContent=text; return a; }
+function renderBench(){
+  const tabs=$('#bench-tabs'); tabs.replaceChildren();
+  for (const t of LAB.claims.tracks){
+    const b=el('button',{type:'button',role:'tab','aria-selected':String(t.package===benchTrack)}); b.textContent=TRACK_NAMES[t.package];
+    b.addEventListener('click',()=>{benchTrack=t.package; renderBench();}); tabs.append(b);
+  }
+  const t=LAB.claims.tracks.find(x=>x.package===benchTrack), mu=t.mutation;
+  const sum=$('#bench-sum'); sum.replaceChildren();
+  sum.append(`${TRACK_NAMES[t.package]} is ${t.about}. `, el('b',{text:`${t.passing} of ${t.claims}`}), ' claims pass. ');
+  if (mu){ sum.append('We planted ', el('b',{text:String(mu.run)}), ` bugs (sampled from ${mu.sites} possible sites in the shipped code); tests caught `, el('b',{text:String(mu.killed)}), mu.survived?`, and ${mu.survived} slipped through. Those are listed first.`:', all of them. '); }
+  else sum.append('The planted-bug run for this part is still in progress. ');
+  sum.append(' ', PROOF_NOTES[t.package]);
+  const q=($('#bench-q').value||'').toLowerCase();
+  const box=$('#bench-claims'); box.replaceChildren(); let shown=0;
+  for (const m of t.modules) for (const s of m.sections){
+    const items=s.claims.filter(c=>!q || c.claim.toLowerCase().includes(q) || c.exercises.some(e=>e.name.toLowerCase().includes(q)));
+    if(!items.length) continue; shown+=items.length;
+    const d=el('details',{class:'clause'}); if(q) d.open=true;
+    const sm=el('summary',{}); sm.append(el('span',{text:s.name}), el('span',{class:'n',text:`${items.filter(c=>c.status==='pass').length}/${items.length} pass · ${m.file.split('/').pop()}`})); d.append(sm);
+    const ul=el('ul',{class:'claims'});
+    for (const c of items){
+      const li=el('li',{}); li.append(el('span',{class:'mk '+(c.status==='pass'?'ok':'no'),text:c.status==='pass'?'✓':'✗'}), el('span',{text:c.claim}));
+      const w=el('span',{class:'where'}); w.append('test ', link(c.link,c.where)); if(c.exercises.length){ w.append(' · checks '); c.exercises.forEach((e,i)=>{ if(i) w.append(', '); w.append(link(e.link,e.name)); }); }
+      li.append(w); ul.append(li);
+    }
+    d.append(ul); box.append(d);
+  }
+  if(!shown) box.append(el('p',{class:'lede',text:`No ${TRACK_NAMES[t.package]} claims mention “${q}”. Try another part above.`}));
+  $('#bench-count').textContent = `${shown} claims shown`;
+  const bugs=$('#bench-bugs'); bugs.replaceChildren();
+  $('#bench-mut-sum').textContent = mu ? `Each entry is one small bug put into the real source, with the line before and after. "Caught by" names the claim whose test failed. A bug that slipped through either changes nothing observable or shows a gap in the tests. Reproduce with ${mu.command}.` : 'Running now in the background; this list fills in on the next publish.';
+  if (mu){
+    const order=[...mu.planted].sort((a,b)=>(a.status==='survived'?0:1)-(b.status==='survived'?0:1));
+    for (const b of order){
+      const d=el('div',{class:'bug '+b.status});
+      d.append(el('strong',{text:(b.status==='survived'?'Slipped through: ':'Caught: ')+b.what}));
+      d.append(el('code',{text:`${b.before}  →  ${b.after}`}));
+      const w=el('span',{class:'where'}); w.append(link(b.link,b.where)); d.append(w);
+      if (b.status==='killed') d.append(el('span',{text:'Caught by: '+b.caught_by}));
+      else d.append(el('span',{class:'meh',text:'No test failed. Triage: harmless rewrite, or a missing test.'}));
+      bugs.append(d);
+    }
+  }
+}
+$('#bench-q').addEventListener('input', renderBench);
+
+renderEvidence(); renderBuild(); renderBench(); resetCave();
 </script>

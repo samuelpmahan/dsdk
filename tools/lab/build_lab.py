@@ -26,8 +26,33 @@ def logic_js() -> str:
     return re.sub(r"^export\s+", "", src, flags=re.M)
 
 
+CARD_WORDS = {
+    "inv-chainspot": "survey of the ChainSpot repos", "inv-misc": "survey of the 15 smaller repos",
+    "inv-pxc-family": "survey of PxCube, PnC, DiscStudio and PageRouter",
+}
+
+
+def card_words() -> dict[str, str]:
+    words = dict(CARD_WORDS)
+    for f in (ROOT / "ops/tasks").glob("T*.md"):
+        tid, _, slug = f.stem.partition("-")
+        area, _, rest = slug.partition("-")
+        words[tid] = {"core": "kernel", "logic": "logic", "lang": "language", "graph": "graph", "js": "JS"}.get(area, area) + " " + rest.replace("-", " ")
+    return words
+
+
+def humanize(text: str, words: dict[str, str]) -> str:
+    def sub(m: re.Match) -> str:
+        w = words.get(m.group(0))
+        return f"the {w} task" if w else m.group(0)
+    return re.sub(r"\bT\d\d\b(?: [a-z]+(?:-[a-z]+)+)?|\binv-[a-z-]+\b", lambda m: sub(re.match(r"T\d\d|inv-[a-z-]+", m.group(0))), text)
+
+
 def ledger() -> list[dict]:
     rows = [json.loads(l) for l in (ROOT / "ops/ledger.jsonl").read_text().splitlines() if l.strip()]
+    w = card_words()
+    for r in rows:
+        r["task"] = humanize(r["task"], w)
     return sorted(rows, key=lambda r: r["ts"])
 
 
@@ -36,7 +61,8 @@ def limits() -> list[dict]:
     for line in (ROOT / "ops/haiku-limits.md").read_text().splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cells) == 5 and re.match(r"\d{4}-\d{2}-\d{2}", cells[0]):
-            out.append({"task": cells[1], "what": cells[3], "fix": cells[4]})
+            w = card_words()
+            out.append({"task": humanize(cells[1], w), "what": humanize(cells[3], w), "fix": humanize(cells[4], w)})
     return out
 
 
@@ -69,6 +95,7 @@ def main() -> None:
         "built_at": dt.datetime.now(dt.UTC).strftime("%Y-%m-%d %H:%M UTC"),
         "git_sha": sh("git", "rev-parse", "HEAD").decode().strip(),
         "ledger": ledger(), "limits": limits(), "a1": a1(), "lostlands": lostlands(),
+        "claims": json.loads((ROOT / "lab/data/claims.json").read_text()),
     }
     page = (ROOT / "lab/src/lab.html").read_text()
     page = page.replace("/*@DATA@*/null", json.dumps(data, separators=(",", ":")))
