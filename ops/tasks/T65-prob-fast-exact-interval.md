@@ -12,7 +12,7 @@
 
 Do NOT edit any file under `tests/`, `fixtures/`, `tools/`, `tracks.toml`, `tracks/`, `ops/`, or any other function in `sampling.py`, or `src/dsdk/prob/__init__.py`. Standard library only (`math.lgamma`, `math.log`, `math.log1p`, `math.exp`, `math.fsum`, `math.nextafter`).
 
-**Done when.** `cd /home/user/dsdk && uv run pytest tests/prob/test_prob_exact_interval_speed.py tests/prob/test_exact_interval.py -q` passes (exit 0), with `.venv/bin/python -m pytest` in place of `uv run pytest`. Then `.venv/bin/python -m pytest -q tests/prob tests/core tests/logic tests/test_reuse.py` still passes, and this prints a time under 0.05 s:
+**Done when.** `cd /home/user/dsdk && .venv/bin/python -m pytest tests/prob/test_prob_exact_interval_speed.py tests/prob/test_exact_interval.py -q` passes (exit 0). Never use uv. Then `.venv/bin/python -m pytest -q tests/prob tests/core tests/logic tests/test_reuse.py` still passes, and this prints a time under 0.05 s:
 `.venv/bin/python -c "import time; from dsdk.prob import exact_interval; t=time.time(); print(exact_interval(146,300), time.time()-t)"`
 
 **Depends on.** the existing exact interval (the Fraction implementation in `sampling.py`, its 53 tests in `tests/prob/test_exact_interval.py` must keep passing unchanged).
