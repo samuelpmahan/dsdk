@@ -71,10 +71,10 @@ def selftest():
     exec(compile(text, "<mutant>", "exec"), ns)
     line = next(i + 1 for i, l in enumerate(text.split("\n")) if re.match(r"\s+while queue:", l))
     caught = 0
-    for e in all_digraphs(3):
-        for s in range(3):
+    for e in all_digraphs(4, loops=False):
+        for s in range(4):
             try:
-                check(3, e, True, s, ns["bfs"], line)
+                check(4, e, True, s, ns["bfs"], line)
             except AssertionError:
                 caught += 1
     assert caught > 0
@@ -82,7 +82,7 @@ def selftest():
 
 
 def main():
-    print("selftest: the stack-based mutant is rejected on", selftest(), "of 1536 (graph, source) runs")
+    print("selftest: the stack-based mutant is rejected on", selftest(), "of 16384 (graph, source) runs")
     graphs = states = 0
     for n in (1, 2, 3):
         for e in all_digraphs(n):

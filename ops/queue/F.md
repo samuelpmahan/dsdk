@@ -55,3 +55,11 @@ Each card names its own done command; use `.venv/bin/python -m pytest` with the 
 | 5 | ops/tasks/T39-prob-integration-gate.md | tests/prob (all) | all above | integration gate |
 
 Today (stubs only): every file under tests/prob fails or errors at collection until its dependencies are implemented; this is expected.
+
+## Integration: probability questions as text (new priority from Sam, 2026-10-09)
+
+| Wave | Card file | Done command (tests) | Depends | What it builds |
+|---|---|---|---|---|
+| 6 | ops/tasks/T60-prob-ask-text.md | tests/integration/test_prob_text.py | all probability cards through the integration gate | `ask`, `ask_net`, `compare_text`, `observe_text`: text parsed by `dsdk.lang.parse_formula` (relaxed) then answered by `dsdk.prob`; parse errors become INVALID with the offset |
+
+Stubs and tests are in place (src/dsdk/prob/ask.py, tests/integration/test_prob_text.py, 43 tests, each running at least two layers on real output of the lower layer). When it passes, remove the `owed_to` line of `dsdk.lang` in tracks.toml, because tests/test_stack.py will then turn red (strict expected failure) until the waiver is gone.

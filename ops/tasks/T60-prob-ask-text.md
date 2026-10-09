@@ -1,0 +1,20 @@
+# T60-prob-ask-text
+
+**Goal.** Make the language package load-bearing for probability: implement `parse_text`, `_parse_pair`, `ask`, `ask_net`, `compare_text` and `observe_text` in `src/dsdk/prob/ask.py`. Questions and evidence are written as text in the relaxed formula syntax (for example `"P22 | P31"` or `"B21 & ~B11"`), parsed by `dsdk.lang.parse_formula(text, relaxed=True)` into logic formulas, and answered by the existing exact probability functions.
+
+**Files to edit.** `src/dsdk/prob/ask.py` only, only the six functions named in the goal. Do NOT edit any file under `tests/`, `fixtures/`, `tracks.toml`, `ops/`, `src/dsdk/prob/__init__.py` (already exports these names) or any other module. The module docstring of `ask.py` is the spec, including the EXACT text of the INVALID reason: read it first, then `tests/integration/test_prob_text.py`.
+
+**Done when.** `cd /home/user/dsdk && uv run pytest tests/integration/test_prob_text.py -q` passes (exit 0). Then run `cd /home/user/dsdk && uv run pytest -q tests/core tests/logic tests/lang tests/graph tests/prob tests/test_reuse.py` and confirm it still passes.
+
+**Depends on.** The probability cards that implement conditioning and queries (the exact-probability card), the Bayes-net builder card, the belief-update card, the world-sampling card and the probability integration gate. The language package is already implemented.
+
+**Pitfalls.**
+- `parse_text(text, role="query text")`: a non-`str` is a `TypeError` (raised, not a Judgment). Call `parse_formula(text, relaxed=True)` inside `try`; catch `LangError` (the base of `LexError` and `ParseError`, already imported). On failure return `Judgment(Status.INVALID, None, reason)` with `reason = f"unparseable {role}: {exc}"`, and, ONLY when `exc` is a `ParseError` whose `expected` set is non-empty, append `"; expected one of: " + ", ".join(sorted(exc.expected))`. `str(exc)` already ends with `(at offset N)`; do not add the offset yourself and do not use `exc.message`. On success return `Judgment(Status.KNOWN, formula, "")`.
+- `_parse_pair(query_text, given_text)` returns `(query, given, failure)`. Type checks first (`TypeError` unless `query_text` is a `str` and `given_text` is `None` or a `str`). Then parse the QUERY first with role `"query text"`; if it fails return `(None, None, that_judgment)`. If `given_text is None` return `(query, None, None)`. Otherwise parse the evidence with role `"evidence text"`; on failure return `(None, None, that_judgment)`. When both texts are bad the answer is about the query.
+- `ask`: `TypeError` if `belief` is not a `Belief`; then `_parse_pair`; if `failure` is not None return it unchanged; else `return probability(belief, query, given)` with no changes (UNKNOWN for unmodelled variables and INVALID for impossible evidence come from there).
+- `ask_net`: `TypeError` for a non-`BayesNet`; parse first (a parse failure is returned before anything else); then `joint_belief(net)` inside `try`; a `ValueError` (too many nodes) becomes `Judgment(Status.INVALID, None, f"cannot enumerate this network: {exc}")`; else `probability(belief, query, given)`.
+- `compare_text(belief, query_text, n, seed, given_text=None)`: `TypeError` for a non-belief; `_parse_pair`; return a failure unchanged; else `return compare_with_exact(belief, query, n, seed, given)` unchanged (argument errors for `n`/`seed` are raised by that function).
+- `observe_text(store, name, evidence_text)`: `TypeError` unless `evidence_text` is a `str`. Parse with `parse_text(evidence_text, "evidence text")`; if not KNOWN return it AS IS and do NOT touch the store. Otherwise `return observe(store, name, parsed.value)`.
+- Never catch `TypeError`/`ValueError` from other calls except the one `ValueError` in `ask_net` named above. Never turn a parse failure into a number.
+
+**Rules.** Use ONLY file reading/editing and Bash for pytest. Never create sessions, triggers, agents or remote resources. Do not run git commands that change state. Remove `raise NotImplementedError` only in the functions this task owns. Keep docstrings. No new dependencies. 2 attempts total.

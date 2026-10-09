@@ -47,3 +47,5 @@
 {"ts": 1791508424, "task": "T36", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 160, "tests_passed": 32, "tests_total": 32, "round": 14, "note": "F: belief updates as ticks"}
 {"ts": 1791508424, "task": "T38", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 164, "tests_passed": 26, "tests_total": 26, "round": 14, "note": "F: next-track sampling; hung 2 min on a stray stdin cat, killed its own process"}
 {"ts": 1791508524, "task": "T35", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 40, "tests_passed": 50, "tests_total": 50, "round": 15, "note": "F: world sampling, exact vs sampled"}
+{"ts": 1791508617, "task": "audit-graph-proofs", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 900, "tests_passed": null, "tests_total": null, "round": null, "note": "F: 4 verdicts, cost claim false until caching edit; ~185k traced loop states"}
+{"ts": 1791508617, "task": "contract-prob-as-text", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 900, "tests_passed": null, "tests_total": null, "round": null, "note": "F: 43 two-layer integration tests; 12/12 planted bugs caught"}
