@@ -1,7 +1,7 @@
 {
  "track": "A1",
- "captured_at": "2026-10-09T00:28:46.386Z",
- "git_sha": "1e53b4d551d3f50dfac6f080292911bbf1b96eb6",
+ "captured_at": "2026-10-09T00:32:28.923Z",
+ "git_sha": "fa23caab074f691a3a5fdafd18d27f1fceed8784",
  "browser": {
   "name": "chromium",
   "version": "141.0.7390.37"
@@ -64,12 +64,12 @@
   {
    "name": "provenance footer shows a 40-hex git sha",
    "passed": true,
-   "detail": "1e53b4d551d3f50dfac6f080292911bbf1b96eb6"
+   "detail": "fa23caab074f691a3a5fdafd18d27f1fceed8784"
   },
   {
    "name": "provenance footer shows the generated time",
    "passed": true,
-   "detail": "2026-10-09T00:28:44Z"
+   "detail": "2026-10-09T00:32:26Z"
   },
   {
    "name": "truth table: textual result present",

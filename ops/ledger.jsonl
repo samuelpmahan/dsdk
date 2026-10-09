@@ -22,3 +22,4 @@
 {"ts": 1791505827, "task": "T24", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 20, "tests_passed": 13, "tests_total": 13, "round": 6, "note": ""}
 {"ts": 1791505878, "task": "proofs-A1-rev2", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 300, "tests_passed": null, "tests_total": null, "round": null, "note": "closed AUDIT-2 N1,N3-N6 with version-checked snippets"}
 {"ts": 1791505911, "task": "T22", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 51, "tests_passed": 59, "tests_total": 59, "round": 7, "note": ""}
+{"ts": 1791505958, "task": "evidence-pipeline-A1", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 538, "tests_passed": null, "tests_total": null, "round": null, "note": "29/29 browser assertions, 90/90 Py-JS agree, tamper control flags"}
