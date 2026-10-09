@@ -1,0 +1,12 @@
+{"ts": 1791492929, "task": "inv-chainspot", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 163, "tests_passed": null, "tests_total": null, "round": 0, "note": "3 files, all headings; flagged newest branch != default"}
+{"ts": 1791492978, "task": "inv-misc", "model": "haiku", "attempt": 1, "outcome": "partial", "wall_s": 212, "tests_passed": null, "tests_total": null, "round": 0, "note": "15 files ok, but skipped branch fetch: misread shallow clone (1 local ref) as 1 remote branch; neat/toph/jukebox/cloudwatch/audio-viz have 2-10 remote branches"}
+{"ts": 1791493057, "task": "inv-pxc-family", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 291, "tests_passed": null, "tests_total": null, "round": 0, "note": "6 files, unverified items labelled honestly"}
+{"ts": 1791493098, "task": "inv-misc", "model": "haiku", "attempt": 2, "outcome": "pass", "wall_s": 332, "tests_passed": null, "tests_total": null, "round": 0, "note": "branch recheck fixed; jukebox/audio-viz/toph/neat newest != main"}
+{"ts": 1791493969, "task": "contracts-core-A1", "model": "sonnet", "attempt": 1, "outcome": "pass", "wall_s": 1028, "tests_passed": null, "tests_total": null, "round": null, "note": "665 tests validated vs scratch reference + 7 injected bugs; 8 Haiku tasks"}
+{"ts": 1791494048, "task": "T01", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 76, "tests_passed": 41, "tests_total": 41, "round": 1, "note": ""}
+{"ts": 1791494189, "task": "T02", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 217, "tests_passed": 131, "tests_total": 131, "round": 1, "note": ""}
+{"ts": 1791494223, "task": "T04", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 160, "tests_passed": 83, "tests_total": 83, "round": 2, "note": ""}
+{"ts": 1791494270, "task": "T03", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 81, "tests_passed": 189, "tests_total": 189, "round": 2, "note": "spawned and archived a stray remote session (tool misuse)"}
+{"ts": 1791494379, "task": "T07", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 130, "tests_passed": 47, "tests_total": 47, "round": 3, "note": ""}
+{"ts": 1791494471, "task": "T05", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 420, "tests_passed": 85, "tests_total": 85, "round": 3, "note": ""}
+{"ts": 1791494496, "task": "T08", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 280, "tests_passed": 42, "tests_total": 42, "round": 3, "note": "spawned stray remote session, left unarchived (planner archived it)"}

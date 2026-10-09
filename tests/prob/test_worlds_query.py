@@ -305,11 +305,15 @@ def test_complement_rule_and_additivity(priors, q):
 @settings(max_examples=40)
 @given(prior_maps())
 def test_normalised_weights_equal_the_posterior_of_each_world(priors):
+    """After conditioning on 'some variable is true', each normalised world weight is that world's conditional probability."""
     names = sorted(priors)
-    b = condition(prior_belief(priors), Or(*[Var(n) for n in names]) if len(names) > 1 else Var(names[0]))
+    some = Var(names[0])
+    for n in names[1:]:
+        some = Or(some, Var(n))
+    b = condition(prior_belief(priors), some)
     if b.total == 0:
         return
     n = known(normalise(b))
     for w in n.worlds:
-        conj_ = conj(*[Var(k) if v else Not(Var(k)) for k, v in w.values])
-        assert w.weight == known(probability(b, conj_, Or(*[Var(x) for x in names]) if len(names) > 1 else Var(names[0])))
+        this_world = conj(*[Var(k) if v else Not(Var(k)) for k, v in w.values])
+        assert w.weight == known(probability(prior_belief(priors), this_world, some))
