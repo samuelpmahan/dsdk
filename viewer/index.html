@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsdk evidence viewer</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1b1f24; --muted: #57606a; --line: #d0d7de; --panel: #f6f8fa;
+  --accent: #0b5cad; --ok-bg: #dafbe1; --ok-fg: #0a5c1f; --bad-bg: #ffd8d3; --bad-fg: #8b1a10;
+  --unk-bg: #fff3c4; --unk-fg: #6b4a00; --focus: #c25500;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1419; --fg: #e6edf3; --muted: #9aa7b4; --line: #30363d; --panel: #161b22;
+    --accent: #6cb6ff; --ok-bg: #12351c; --ok-fg: #7ee787; --bad-bg: #4a1713; --bad-fg: #ffa198;
+    --unk-bg: #3b2e05; --unk-fg: #f2cc60; --focus: #ffa657;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px 32px; }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; top: 0; background: var(--bg); padding: 8px; z-index: 5; }
+.skip:focus { left: 8px; top: 8px; }
+header h1 { font-size: 1.4rem; margin: 16px 0 4px; }
+.sub { color: var(--muted); margin: 0 0 12px; }
+.views { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; padding: 0; border: 0; }
+.views button, .dl { font: inherit; padding: 6px 12px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--fg); border-radius: 6px; cursor: pointer; text-decoration: none; }
+.views button[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+#xcheck { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; margin: 8px 0 16px; }
+section.view h2 { font-size: 1.15rem; margin: 8px 0; }
+section.view[hidden] { display: none; }
+table { border-collapse: collapse; margin: 8px 0 16px; max-width: 100%; }
+caption { text-align: left; font-weight: 600; padding: 4px 0; }
+th, td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; vertical-align: top; }
+thead th { background: var(--panel); }
+td.num, td.c { text-align: center; font-variant-numeric: tabular-nums; }
+code, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .92em; }
+.mark { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: .85rem; font-weight: 600; }
+.mark.agree { background: var(--ok-bg); color: var(--ok-fg); }
+.mark.disagree { background: var(--bad-bg); color: var(--bad-fg); }
+.badge { display: inline-block; padding: 0 8px; border-radius: 4px; font-weight: 600; }
+.badge.safe { background: var(--ok-bg); color: var(--ok-fg); }
+.badge.pit { background: var(--bad-bg); color: var(--bad-fg); }
+.badge.undetermined { background: var(--unk-bg); color: var(--unk-fg); }
+.worlds { display: flex; flex-wrap: wrap; gap: 24px; }
+.grid td { width: 96px; height: 64px; text-align: center; vertical-align: middle; }
+.grid td.pitcell { background: var(--bad-bg); color: var(--bad-fg); font-weight: 700; }
+.grid td.safecell { background: var(--ok-bg); color: var(--ok-fg); }
+.grid td.unkcell { background: var(--unk-bg); color: var(--unk-fg); }
+.note { background: var(--panel); border-left: 4px solid var(--accent); padding: 8px 12px; margin: 8px 0; }
+.text-result { font-weight: 600; }
+footer { border-top: 1px solid var(--line); margin-top: 32px; padding-top: 12px; color: var(--muted); font-size: .9rem; }
+footer dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+footer dt { font-weight: 600; } footer dd { margin: 0; overflow-wrap: anywhere; }
+label { font-weight: 600; margin-right: 8px; } select { font: inherit; padding: 4px; max-width: 100%; }
+@media (max-width: 600px) { .grid td { width: 64px; height: 48px; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to results</a>
+<div class="wrap">
+<header>
+  <h1 id="title">dsdk evidence viewer</h1>
+  <p class="sub" id="subtitle">Loading packet...</p>
+  <div class="views" id="views" role="group" aria-label="Views" style="display:none"></div>
+  <p><a class="dl" id="download" href="#" download="packet.json" hidden>Download values (JSON)</a></p>
+</header>
+<main id="main" tabindex="-1">
+  <p id="xcheck" role="status" aria-live="polite">Python/JS cross-check: waiting for packet.</p>
+  <div id="view-container"></div>
+  <p id="error" role="alert" hidden></p>
+</main>
+<footer id="provenance" aria-label="Provenance"></footer>
+</div>
+<script type="module">
+import { h, CrossCheck, table } from './ui.mjs';
+
+const params = new URLSearchParams(location.search);
+const packetUrl = params.get('packet');
+const $ = (id) => document.getElementById(id);
+
+function fail(msg) {
+  const e = $('error'); e.hidden = false; e.textContent = msg;
+  $('subtitle').textContent = 'Could not load packet.';
+  document.documentElement.setAttribute('data-load', 'error');
+}
+
+function summaryView(p) {
+  const r = p.result, q = p.question, rec = p.run_record;
+  return h('div', {},
+    h('p', { class: 'text-result', id: 'verdict' }, `Verdict: ${r.verdict}`),
+    h('p', {}, r.statement),
+    h('h3', {}, 'Question'), h('p', {}, q.text),
+    h('h3', {}, 'Competing explanations'),
+    table('How each competing explanation is addressed', ['Explanation', 'What it says', 'How addressed'],
+      q.competing_explanations.map((e) => [e.name, e.description, e.how_addressed]), { rowHeader: true }),
+    h('h3', {}, 'Scope of the claim'),
+    h('p', {}, 'The evidence claims:'), h('ul', {}, q.scope.claims.map((c) => h('li', {}, c))),
+    h('p', {}, 'It does not claim:'), h('ul', {}, q.scope.does_not_claim.map((c) => h('li', {}, c))),
+    h('h3', {}, 'Test runs recorded'),
+    table('pytest summaries captured at build time', ['Target', 'Summary', 'Exit code'],
+      rec.tests.map((t) => [t.target, t.summary, String(t.exit_code)]), { rowHeader: true }),
+    h('h3', {}, 'Oracle'),
+    table('Independent reference comparisons', ['Comparison', 'Compared', 'Mismatches'],
+      p.oracle.independent_reference.comparisons.map((c) => [c.name, String(c.compared), String(c.mismatches)])),
+    table('Deliberately failing cases (the failure is the evidence)', ['Case', 'Failed as expected', 'Detail'],
+      p.oracle.deliberate_failures.map((d) => [d.name, d.failure_observed ? 'yes' : 'NO', d.detail]), { rowHeader: true }),
+    h('h3', {}, 'Next bounded experiment'), h('p', {}, r.next_bounded_experiment));
+}
+
+function provenance(p) {
+  const rec = p.run_record;
+  const dl = (k, v) => [h('dt', {}, k), h('dd', {}, v)];
+  const foot = $('provenance');
+  foot.replaceChildren(h('dl', {}, dl('Git SHA', h('span', { class: 'mono', id: 'prov-sha' }, rec.git_sha)),
+    dl('Working tree dirty at build', String(rec.working_tree_dirty)),
+    dl('Generated', h('time', { id: 'prov-time', datetime: p.generated_at }, p.generated_at)),
+    dl('Python', rec.environment.python), dl('Packet', packetUrl),
+    dl('Track', `${p.track} (packet v${p.packet_version})`)));
+}
+
+async function main() {
+  if (!packetUrl) return fail('Missing ?packet=<url> query parameter.');
+  let text, packet;
+  try {
+    const res = await fetch(packetUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    text = await res.text(); packet = JSON.parse(text);
+  } catch (e) { return fail(`Could not load packet ${packetUrl}: ${e.message}`); }
+  if (!/^[A-Za-z0-9]+$/.test(packet.track || '')) return fail('Packet has no valid track id.');
+  let mod;
+  try { mod = await import(`./${packet.track.toLowerCase()}.mjs`); }
+  catch (e) { return fail(`No viewer module for track ${packet.track}: ${e.message}`); }
+
+  $('title').textContent = packet.title;
+  $('subtitle').textContent = `Track ${packet.track}. Every Python value below is recomputed in the browser by independent JS.`;
+  document.title = `${packet.title} - dsdk evidence`;
+  const dl = $('download');
+  dl.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(text);
+  dl.download = `${packet.track.toLowerCase()}-packet.json`; dl.hidden = false;
+
+  const xc = new CrossCheck();
+  const views = [{ id: 'summary', label: 'Summary', node: summaryView(packet) },
+    ...mod.views(packet, { xc, h, table })];
+  const box = $('view-container'); const bar = $('views');
+  bar.style.display = '';
+  const buttons = new Map();
+  function show(id) {
+    for (const v of views) {
+      v.section.hidden = v.id !== id;
+      buttons.get(v.id).setAttribute('aria-pressed', String(v.id === id));
+    }
+    history.replaceState(null, '', `#${id}`);
+  }
+  for (const v of views) {
+    v.section = h('section', { class: 'view', id: `view-${v.id}`, 'aria-labelledby': `h-${v.id}`, hidden: true },
+      h('h2', { id: `h-${v.id}` }, v.label), v.node);
+    box.append(v.section);
+    const b = h('button', { type: 'button', id: `btn-${v.id}`, 'aria-pressed': 'false', 'aria-controls': `view-${v.id}` }, v.label);
+    b.addEventListener('click', () => show(v.id));
+    buttons.set(v.id, b); bar.append(b);
+  }
+  provenance(packet);
+  $('xcheck').textContent = `Python/JS cross-check: ${xc.agree + xc.disagree} comparisons, ${xc.agree} agree, ${xc.disagree} disagree.`;
+  $('xcheck').dataset.agree = String(xc.agree); $('xcheck').dataset.disagree = String(xc.disagree);
+  const want = location.hash.slice(1);
+  show(views.some((v) => v.id === want) ? want : 'summary');
+  document.documentElement.setAttribute('data-load', 'ready');
+}
+main().catch((e) => fail(`Viewer error: ${e.message}`));
+</script>
+</body>
+</html>

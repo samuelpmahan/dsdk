@@ -63,6 +63,7 @@ def test_binop_accepts_each_operator(op):
 def test_ops_constant_lists_the_seven_operators():
     """OPS is the exact operator tuple in the documented order."""
     assert OPS == ("+", "-", "*", "<", "==", "and", "or")
+    assert [BinOp(op, IntLit(1), IntLit(2)).op for op in OPS] == list(OPS)
 
 
 @pytest.mark.parametrize("op", ["/", "<=", "&&", "AND", "", "not", "=", "->", None])

@@ -8,7 +8,7 @@ import pytest
 
 from dsdk.core import Status
 from dsdk.lang import LexError, ParseError, parse_formula
-from dsdk.lang.calc import StuckError, Type, evaluate, parse_calc, size, to_source, trace, typecheck
+from dsdk.lang.calc import Outcome, StuckError, Type, classify, evaluate, parse_calc, size, to_source, trace, typecheck
 from dsdk.logic import to_str
 
 from lang_helpers import decode_ast, encode_ast, load_fixture
@@ -108,18 +108,31 @@ def test_big_step_value_matches_the_fixture(case):
         assert (Type.BOOL if type(got) is bool else Type.INT) is Type(case["value_type"])
 
 
-def test_well_typed_programs_in_the_fixture_never_get_stuck():
-    """Type safety on the fixture: every `valid` program ends in a value whose type is the static type."""
-    for c in CALC["valid"]:
-        assert not c["stuck"] and c["value_type"] == c["type"], c["name"]
+@pytest.mark.parametrize("case", CALC["valid"], ids=[c["name"] for c in CALC["valid"]])
+def test_well_typed_programs_in_the_fixture_never_get_stuck(case):
+    """Type safety on the fixture: a `valid` program (typechecks) ends its trace in a value of the static type."""
+    e = decode_ast(case["ast"])
+    j = typecheck(e)
+    final = trace(e)[-1]
+    assert j.status is Status.KNOWN and classify(final) is Outcome.VALUE, case["name"]
+    assert (Type.BOOL if type(evaluate(e)) is bool else Type.INT) is j.value
 
 
-def test_ill_typed_does_not_mean_stuck_in_the_fixture():
-    """The fixture holds ill-typed programs that still evaluate (`false and (1 + true)`), proving the static check is conservative."""
-    runs = [c["name"] for c in CALC["invalid"] if not c["stuck"]]
-    assert {"branch_not_taken_is_ill_typed", "short_circuit_hides_error", "branch_mismatch_but_runs"} <= set(runs)
-    stuck = [c["name"] for c in CALC["invalid"] if c["stuck"]]
-    assert {"int_plus_bool", "unbound_var", "stuck_left_blocks_right"} <= set(stuck)
+@pytest.mark.parametrize("case", [c for c in CALC["invalid"] if not c["stuck"]], ids=[c["name"] for c in CALC["invalid"] if not c["stuck"]])
+def test_ill_typed_does_not_mean_stuck_in_the_fixture(case):
+    """Some ill-typed fixture programs (`false and (1 + true)`) still evaluate to a value: the static check is conservative, so INVALID and STUCK are different facts."""
+    e = decode_ast(case["ast"])
+    assert typecheck(e).status is Status.INVALID
+    assert classify(trace(e)[-1]) is Outcome.VALUE
+
+
+def test_fixture_covers_both_kinds_of_ill_typed_program():
+    """The invalid list must contain stuck programs AND ill-typed programs that run, otherwise the lesson is missing (names are the contract)."""
+    runs = {c["name"] for c in CALC["invalid"] if not c["stuck"]}
+    stuck = {c["name"] for c in CALC["invalid"] if c["stuck"]}
+    assert {"branch_not_taken_is_ill_typed", "short_circuit_hides_error", "branch_mismatch_but_runs"} <= runs
+    assert {"int_plus_bool", "unbound_var", "stuck_left_blocks_right"} <= stuck
+    assert all(decode_ast(c["ast"]) for c in CALC["invalid"]), "and every fixture AST must decode"
 
 
 @pytest.mark.parametrize("case", CALC["syntax_errors"], ids=[repr(c["source"]) for c in CALC["syntax_errors"]])

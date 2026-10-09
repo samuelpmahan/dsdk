@@ -1,0 +1,170 @@
+{
+ "track": "A1",
+ "captured_at": "2026-10-09T00:28:05.962Z",
+ "git_sha": "2f7943b2ae81881df5b7174d7121acaad933f361",
+ "browser": {
+  "name": "chromium",
+  "version": "141.0.7390.37"
+ },
+ "viewport": {
+  "width": 1280,
+  "height": 900
+ },
+ "packet": "tracks/A1/evidence/packet.json",
+ "assertions_total": 28,
+ "assertions_passed": 26,
+ "assertions_failed": 2,
+ "ok": false,
+ "assertions": [
+  {
+   "name": "viewer loaded the packet without a load error",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "keyboard: Tab reaches the skip link, all view buttons and the download link",
+   "passed": true,
+   "detail": "skip > btn-summary > btn-truth-table > btn-countermodel > btn-wumpus > btn-proof-check > btn-partial-eval > btn-induction > download > BODY > skip > btn-summary > btn-truth-table"
+  },
+  {
+   "name": "keyboard: Enter on a focused view button opens that view",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "keyboard: Space on a focused view button opens that view",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "cross-check: zero disagree marks",
+   "passed": true,
+   "detail": "disagree=0"
+  },
+  {
+   "name": "cross-check: marks are actually present (not vacuous)",
+   "passed": false,
+   "detail": "agree=90"
+  },
+  {
+   "name": "download link is a data: URL of the packet",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "page has tables with captions and header cells",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "summary: verdict is stated in text",
+   "passed": true,
+   "detail": "Verdict: supported"
+  },
+  {
+   "name": "provenance footer shows a 40-hex git sha",
+   "passed": true,
+   "detail": "ccb3e3edbcd0c234146ca5e86e93e5d6df112c69"
+  },
+  {
+   "name": "provenance footer shows the generated time",
+   "passed": true,
+   "detail": "2026-10-09T00:26:14Z"
+  },
+  {
+   "name": "truth table: textual result present",
+   "passed": true,
+   "detail": "((a & (b | c)) <-> ((a & b) | (a & c))) has 8 row(s) and 8 model(s) in Python and 8 in JS; satisfiable: true; valid: true."
+  },
+  {
+   "name": "truth table: default (3-variable) table has 8 rows",
+   "passed": true,
+   "detail": "rows=8"
+  },
+  {
+   "name": "truth table: formula selector changes the table from the keyboard",
+   "passed": true,
+   "detail": "((a & (b | c)) <-> ((a & b) | (a & c))) has 8 row(s) and 8 model(s) in Python and 8 in JS; satisfiable: true; valid: true. -> (~(a <-> b)) has 4 row(s) and 2 model(s) in Python and 2 in JS; satisfiable: true; valid: false."
+  },
+  {
+   "name": "countermodel: affirming the consequent has countermodel p=F q=T in Python and JS",
+   "passed": true,
+   "detail": "affirming consequent From (p -> q) and q, conclude p. Invalid: p=false, q=true is a countermodel. Result for affirming_consequent Item Value Premises (p -> q) , q Conclusion p Entailed? (Python) false Entailed? (JS) false Countermodel (Python) p=F q=T Countermodel (JS) p=F q=T Check agree Under that"
+  },
+  {
+   "name": "countermodel: a valid inference states that no countermodel exists",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "wumpus: 3 possible worlds in Python and JS",
+   "passed": true,
+   "detail": "The knowledge base has 3 possible worlds (Python) and 3 (JS). P12: entailed safe; P21: entailed safe; P22: undetermined."
+  },
+  {
+   "name": "wumpus: exactly 3 world grids drawn",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "wumpus: P12 is entailed safe",
+   "passed": true,
+   "detail": "entailed safe"
+  },
+  {
+   "name": "wumpus: P21 is entailed safe",
+   "passed": true,
+   "detail": "entailed safe"
+  },
+  {
+   "name": "wumpus: P22 is undetermined",
+   "passed": true,
+   "detail": "undetermined"
+  },
+  {
+   "name": "proof check: affirming the consequent is rejected at step 2 by both checkers",
+   "passed": true,
+   "detail": "invalid affirming consequent p->q, q |- p claimed by modus ponens. The checker must reject it. Steps of invalid_affirming_consequent (Python verdict per step) Step Formula Rule Cites Checker 0 (p -> q) premise - ok 1 q premise - ok 2 p modus_ponens 0, 1 REJECTED Checker outcome Python JS Verdict rej"
+  },
+  {
+   "name": "proof check: valid proof accepted",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "partial eval: KNOWN false for false AND x and UNKNOWN for x OR ~x",
+   "passed": false,
+   "detail": "Partial evaluation Strong Kleene: a value is KNOWN only when the known parts decide it; otherwise UNKNOWN, with the unassigned variables listed. Strong-Kleene partial evaluation, Python vs JS Case Formula Assignment Python JS Check Why false_and_unknown (false & x) (empty) KNOWN false KNOWN false ag"
+  },
+  {
+   "name": "induction: states that checks do not prove the claims and PROOFS.md does",
+   "passed": true,
+   "detail": "These are EXECUTED CHECKS on finitely many inputs. They do not prove the claims for all n or all trees. The proofs are in tracks/A1/PROOFS.md (Proof 1 by induction on n; Proof 2 by structural induction)."
+  },
+  {
+   "name": "cross-check: still zero disagree marks after all interactions",
+   "passed": true,
+   "detail": "disagree=0"
+  },
+  {
+   "name": "no console errors, page errors or failed requests",
+   "passed": true,
+   "detail": ""
+  },
+  {
+   "name": "negative control: tampered packet is flagged with disagree marks",
+   "passed": true,
+   "detail": "disagree=1"
+  }
+ ],
+ "screenshots": [
+  "a1-summary.png",
+  "a1-truth-table.png",
+  "a1-countermodel.png",
+  "a1-wumpus.png",
+  "a1-proof-check.png",
+  "a1-partial-eval.png",
+  "a1-induction.png",
+  "a1-tamper-control.png"
+ ]
+}
