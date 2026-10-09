@@ -1,0 +1,8 @@
+# The sampler audits itself: a coverage table that is a Part with lineage
+kind: instrument
+idea: Once exact_interval is fast, build a Part in dsdk.core whose output is the measured coverage of the sampled Wumpus questions: draw many seeded estimates with estimate_probability, compare each Wilson and each exact interval with the exact answer from probability(), and store the hit rates. The Part's inputs are the belief and the seeds, so when a prior changes the table re-ticks and says which numbers moved, with the receipt chain from dsdk.core and the lineage graph from dsdk.graph.
+why it's interesting: Sam's rule is "claims that can be cross-checked". Today the 84 % vs 95 % coverage fact lives in a proof and a test; this turns it into a live number tied to HIS Wumpus and Lost Lands beliefs, which says whether the Lab's "95 %" label is honest for the questions he actually asks, and flags it automatically when a data change makes it dishonest.
+smallest experiment: For the Wumpus belief in fixtures/prob/wumpus_priors.json and each query in tests/prob/test_wumpus_oracle.py, run 2,000 seeds of 50 draws each; report per query the fraction of seeds whose Wilson interval and whose exact interval contain the exact answer. Wrap in one composed Part and show the receipt when one prior is changed.
+reuses: dsdk.prob (compare_with_exact, estimate_probability, exact_interval, probability), dsdk.core (Part, tick, receipts), dsdk.graph (lineage of the Part), fixtures/prob/wumpus_priors.json.
+probe: not run (needs the fast exact_interval; with the slow one 2,000 seeds x 2 intervals at n = 50 is about 40 minutes).
+score: surprise=3 cost=3 reuse=4

@@ -1,13 +1,13 @@
 """Regenerate fixtures/prob/exact_interval_grid.json from the SLOW reference implementation of dsdk.prob.exact_interval.
 
 The fixture freezes the outputs of the exact-Fraction bisection (60 halvings) so that a faster implementation can be
-compared against it to 1e-12. Run it ONLY against the slow reference (the Fraction version). It takes about 25 minutes on 4 cores
+compared against it to 1e-12. It uses ``dsdk.prob.sampling._exact_interval_reference`` when that exists, else ``exact_interval``, and must be pointed at the slow Fraction version. It takes about 25 minutes on 4 cores
 because the reference needs about 6 s per (k, n) at n = 300 and minutes per point at n >= 1000.
 
     .venv/bin/python tools/prob/gen_exact_interval_grid.py [--workers 4] [--out fixtures/prob/exact_interval_grid.json]
 
 Grid: every k for n in {1, 2, 3, 5, 10, 30, 100, 300}; spot checks at n = 1000 and n = 2000 (SPOTS below).
-The script refuses to run if exact_interval is already fast (a 5/100 call under 0.1 s), because then it would be freezing the
+The script refuses to run if the reference it picked is fast (a 5/100 call under 0.1 s), because then it would be freezing the
 output of the thing under test instead of the reference.
 """
 from __future__ import annotations
@@ -25,11 +25,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def one(case: tuple[int, int]) -> list:
-    from dsdk.prob import exact_interval
-
     k, n = case
-    low, high = exact_interval(k, n)
+    low, high = reference()(k, n)
     return [k, n, low, high]
+
+
+def reference():
+    """The slow exact-Fraction version: ``_exact_interval_reference`` once the fast implementation has replaced ``exact_interval``."""
+    from dsdk.prob import sampling
+
+    return getattr(sampling, "_exact_interval_reference", sampling.exact_interval)
 
 
 def cases() -> list[tuple[int, int]]:
@@ -44,12 +49,10 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--out", default=str(ROOT / "fixtures" / "prob" / "exact_interval_grid.json"))
     args = ap.parse_args()
-    from dsdk.prob import exact_interval
-
     t = time.time()
-    exact_interval(5, 100)
+    reference()(5, 100)
     if time.time() - t < 0.1:
-        print("exact_interval is already fast: refusing to freeze it (use the slow Fraction reference)", file=sys.stderr)
+        print("the reference is fast: refusing to freeze it (it must be the slow Fraction version)", file=sys.stderr)
         return 2
     started = time.time()
     with ProcessPoolExecutor(args.workers) as pool:
