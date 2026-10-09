@@ -19,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[2]
 GH = "https://github.com/samuelpmahan/dsdk/blob/claude/friendly-cray-zex2o8/"
 SECTION = re.compile(r"^\s*#\s*[=\-#]{3,}\s*(.+?)\s*[=\-#]*\s*$")
 TRACK_TESTS = {"dsdk.core": "tests/core", "dsdk.logic": "tests/logic", "dsdk.lang": "tests/lang", "dsdk.graph": "tests/graph", "dsdk.prob": "tests/prob", "dsdk.worlds": "tests/worlds"}
+# cross-package tests live in tests/integration; each file belongs to the package whose code it exercises
+INTEGRATION = {"dsdk.logic": ["tests/integration/test_proof_lineage.py"], "dsdk.graph": ["tests/integration/test_graph_proofs.py"],
+               "dsdk.prob": ["tests/integration/test_prob_text.py", "tests/integration/test_prob_expectation.py"]}
 PLAIN = {
     "dsdk.core": "the kernel: status values, write-once Parts, recorded calculations and all-or-nothing ticks",
     "dsdk.logic": "propositional logic: formulas, evaluation with unknowns, model enumeration, entailment, a proof checker, induction exercises",
@@ -55,7 +58,7 @@ def enclosing(file: str, line: int) -> str:
 
 def run_junit(tests: str) -> dict[str, str]:
     with tempfile.NamedTemporaryFile(suffix=".xml") as tmp:
-        subprocess.run([str(ROOT / ".venv/bin/python"), "-m", "pytest", tests, "-q", "-p", "no:cacheprovider",
+        subprocess.run([str(ROOT / ".venv/bin/python"), "-m", "pytest", *tests.split(), "-q", "-p", "no:cacheprovider",
                         f"--junitxml={tmp.name}"], cwd=ROOT, capture_output=True, text=True)
         tree = ET.parse(tmp.name)
     out: dict[str, str] = {}
@@ -89,9 +92,10 @@ def main() -> None:
     tracks = []
     claim_by_node: dict[str, str] = {}
     for pkg, tdir in TRACK_TESTS.items():
-        results = run_junit(tdir)
+        extra = INTEGRATION.get(pkg, [])
+        results = run_junit(" ".join([tdir, *extra]))
         modules = []
-        for f in sorted((ROOT / tdir).glob("test_*.py")):
+        for f in [*sorted((ROOT / tdir).glob("test_*.py")), *(ROOT / e for e in extra)]:
             src = f.read_text()
             lines = src.splitlines()
             tree = ast.parse(src)

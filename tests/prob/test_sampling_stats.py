@@ -111,6 +111,13 @@ def test_make_estimate_fields():
     assert (e.low, e.high) == wilson_interval(30, 100)
 
 
+
+def test_make_estimate_accepts_a_single_trial():
+    """The smallest legal estimate is one trial: one success in one draw gives p_hat 1 and a Wilson interval ending at 1, and zero successes gives p_hat 0 (the rule is 'at least one trial', not two)."""
+    e = make_estimate(1, 1, 1)
+    assert (e.successes, e.trials, e.drawn, e.p_hat) == (1, 1, 1, 1.0) and e.high == wilson_interval(1, 1)[1]
+    assert make_estimate(0, 1, 3).p_hat == 0.0
+
 @pytest.mark.parametrize("args,exc", [((1, 5, 4), ValueError), ((1, 0, 5), ValueError), ((6, 5, 5), ValueError), ((1, 5, 0), ValueError), ((1, 5.0, 5), TypeError)])
 def test_make_estimate_rules(args, exc):
     """An estimate cannot have fewer draws than trials, zero trials, more successes than trials, or non-integer counts."""
