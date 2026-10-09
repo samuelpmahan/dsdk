@@ -223,7 +223,12 @@ def exactly_one_wumpus_text(front: tuple[Cell, ...]) -> str:
     ``"(W12 | W21 | WR) & ~(W12 & W21) & ~(W12 & WR) & ~(W21 & WR)"``. An empty ``front`` gives ``"(WR)"`` (no pairs). This is the same fact the
     probability model of :func:`stuck_risk` uses, so logic and probability can be compared on equal terms.
     """
-    raise NotImplementedError
+    variables = [f"W{name(c)}" for c in front] + ["WR"]
+    parts = [f"({' | '.join(variables)})"]
+    for i, a in enumerate(variables):
+        for b in variables[i + 1:]:
+            parts.append(f"~({a} & {b})")
+    return " & ".join(parts)
 
 
 def provably_safe(percepts: dict, *, exactly_one_wumpus: bool = False) -> tuple[Cell, ...]:
@@ -235,11 +240,16 @@ def provably_safe(percepts: dict, *, exactly_one_wumpus: bool = False) -> tuple[
     formula, parsed the same way). That fact lets logic rule out squares that two overlapping stenches cannot both explain: with stenches at
     (1,2) and (2,1) the Wumpus must be on (2,2), so (1,3) and (3,1) become provably safe. With the option on, a frontier square is provably
     safe EXACTLY when :func:`stuck_risk` gives it ``death == 0`` (logic and probability agree). ``TypeError`` if ``exactly_one_wumpus`` is not a bool."""
+    if not isinstance(exactly_one_wumpus, bool):
+        raise TypeError(f"exactly_one_wumpus must be a bool, not {type(exactly_one_wumpus).__name__}")
+    front = frontier(set(percepts))
     pit_formulas = [parse_formula(s, relaxed=True) for s in knowledge(percepts)[0]]
     wumpus_formulas = [parse_formula(s, relaxed=True) for s in knowledge(percepts)[1]]
+    if exactly_one_wumpus and front:
+        wumpus_formulas.append(parse_formula(exactly_one_wumpus_text(front), relaxed=True))
     return tuple(
         c
-        for c in frontier(set(percepts))
+        for c in front
         if entails(pit_formulas, Not(Var(f"P{name(c)}"))) and entails(wumpus_formulas, Not(Var(f"W{name(c)}")))
     )
 
@@ -283,7 +293,7 @@ def run_agent(cave: Cave, *, probabilistic: bool = False, exactly_one_wumpus: bo
             has_gold = True
         if has_gold:
             return AgentRun("escaped with gold", tuple(stuck), tuple(gambles))
-        safe = provably_safe(percepts)
+        safe = provably_safe(percepts, exactly_one_wumpus=exactly_one_wumpus)
         if safe:
             here = safe[0]
             percepts[here] = percept(cave, here, has_gold)
@@ -319,7 +329,7 @@ def sweep_rates(seeds, *, probabilistic: bool, exactly_one_wumpus: bool = False,
     caves = died = gold = empty = 0
     for s in seeds:
         caves += 1
-        outcome = run_agent(seeded_cave(s), probabilistic=probabilistic).outcome
+        outcome = run_agent(seeded_cave(s), probabilistic=probabilistic, exactly_one_wumpus=exactly_one_wumpus).outcome
         if outcome == "died":
             died += 1
         elif outcome == "escaped with gold":
