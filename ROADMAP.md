@@ -68,8 +68,8 @@ States: Proposed → Selected → Building → Evidence ready → Reviewed.
 
 | Track | State | Next bounded step |
 |---|---|---|
-| A0 core | Evidence ready | 189 tests green. Next: Sam reads `pxc.py` tick semantics and explains rollback receipts back |
-| A1 logic | Evidence ready | 476 tests green. Next: Sam rewrites one proof from `tracks/A1/PROOFS.md` unaided; then A2 contract |
+| A0 core | Evidence ready | 189 tests green. Next: evidence packet + browser capture of tick rollback receipts |
+| A1 logic | Evidence ready | 476 tests green. Next: Sonnet audit of PROOFS.md; evidence packet + browser captures (truth tables, countermodels, Wumpus worlds) |
 | A2 lang | Proposed | Sonnet contract: parser must round-trip `logic.to_str` |
 | A5 graph | Proposed | Contract: BFS + witness paths over Part lineage |
 | A3 prob | Proposed | Contract: weight `wumpus_kb` models; reproduce 4/9, 4/9, 1/9 |
@@ -87,4 +87,4 @@ See `ops/README.md`.
 Backpressure is tracked in `ops/ledger.jsonl` (`python ops/ledger.py stats`). Haiku failure modes are recorded in
 `ops/haiku-limits.md`.
 
-**Sam's part:** the proofs and the "explain it back" step for each track are not delegated.
+**Sam's part:** direction only (`ops/for-sam.md`). Agents write the code, the proofs, the audits and the evidence.
