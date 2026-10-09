@@ -43,3 +43,4 @@
 {"ts": 1791508162, "task": "T30", "model": "haiku", "attempt": 2, "outcome": "pass", "wall_s": 59, "tests_passed": 85, "tests_total": 85, "round": 12, "note": "F: exact worlds, after card gap fixed"}
 {"ts": 1791508218, "task": "T31", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 29, "tests_passed": 82, "tests_total": 82, "round": 13, "note": "F: conditioning; Wumpus oracle reproduced exactly"}
 {"ts": 1791508237, "task": "T37", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 57, "tests_passed": 38, "tests_total": 38, "round": 13, "note": "F: next-track model with smoothing"}
+{"ts": 1791508293, "task": "T32", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 90, "tests_passed": 44, "tests_total": 44, "round": 14, "note": "F: Bayes-net builder on graph DAGs"}

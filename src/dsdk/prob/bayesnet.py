@@ -13,6 +13,7 @@ fabricated certainty: it is a ``ValueError``.
 """
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import Mapping
@@ -53,7 +54,47 @@ def bayes_net(structure: Graph, cpts: Mapping[str, Mapping[tuple[bool, ...], obj
 
     The returned net stores its own copies: later changes to the caller's dicts do not affect it.
     """
-    raise NotImplementedError
+    if not isinstance(structure, Graph):
+        raise TypeError(f"structure must be a Graph, not {type(structure).__name__}")
+    if not isinstance(cpts, Mapping):
+        raise TypeError(f"cpts must be a Mapping, not {type(cpts).__name__}")
+    if not structure.directed:
+        raise ValueError("a Bayes net needs a directed graph")
+    for node in structure.nodes:
+        if not isinstance(node, str):
+            raise TypeError(f"Bayes net node ids are variable names (str), not {type(node).__name__}: {node!r}")
+    for edge in structure.edges:
+        if edge.evidence is not Status.KNOWN:
+            raise ValueError(
+                f"edge {edge.source!r} -> {edge.target!r} has evidence {edge.evidence.name}; a Bayes net needs KNOWN edges"
+            )
+    cycle = find_cycle(structure)
+    if cycle is not None:
+        raise CycleError(cycle)
+    nodes = set(structure.nodes)
+    given = set(cpts.keys())
+    missing = sorted(nodes - given, key=repr)
+    extra = sorted(given - nodes, key=repr)
+    if missing:
+        raise ValueError(f"no CPT for node(s): {', '.join(map(repr, missing))}")
+    if extra:
+        raise ValueError(f"CPT given for node(s) not in the graph: {', '.join(map(repr, extra))}")
+    cleaned: dict[str, dict[tuple[bool, ...], Fraction]] = {}
+    for node in structure.nodes:
+        table = cpts[node]
+        if not isinstance(table, Mapping):
+            raise TypeError(f"CPT of {node!r} must be a Mapping, not {type(table).__name__}")
+        k = len(structure.predecessors(node))
+        for key in table.keys():
+            if not isinstance(key, tuple) or len(key) != k:
+                raise ValueError(f"CPT key {key!r} of {node!r} must be a tuple of {k} parent value(s)")
+            if not all(type(v) is bool for v in key):
+                raise ValueError(f"CPT key {key!r} of {node!r} must hold only True/False")
+        expected = set(itertools.product([False, True], repeat=k))
+        if set(table.keys()) != expected:
+            raise ValueError(f"CPT of {node!r} must have exactly the {2 ** k} parent combinations of True/False")
+        cleaned[node] = {tuple(key): to_prob(table[key], f"CPT[{node!r}]") for key in table.keys()}
+    return BayesNet(structure=structure, cpts=cleaned)
 
 
 def joint_belief(net: BayesNet) -> Belief:
@@ -63,7 +104,20 @@ def joint_belief(net: BayesNet) -> Belief:
     over nodes of ``P(node = its value | its parents' values in this world)`` read from the CPT. The weights sum to exactly
     ``Fraction(1)``. More than ``MAX_VARIABLES`` nodes: ``ValueError``. ``TypeError`` for a non-BayesNet.
     """
-    raise NotImplementedError
+    if not isinstance(net, BayesNet):
+        raise TypeError(f"joint_belief takes a BayesNet, not {type(net).__name__}")
+    names = tuple(sorted(net.structure.nodes))
+    if len(names) > MAX_VARIABLES:
+        raise ValueError(f"a joint over {len(names)} variables exceeds the limit of {MAX_VARIABLES}")
+    parents = {n: net.structure.predecessors(n) for n in names}
+    worlds = []
+    for model in models(Const(True), over=names):
+        weight = Fraction(1)
+        for n in names:
+            p = net.cpts[n][tuple(model[q] for q in parents[n])]
+            weight *= p if model[n] else 1 - p
+        worlds.append(WeightedWorld(values=tuple((n, model[n]) for n in names), weight=weight))
+    return Belief(variables=names, worlds=tuple(worlds))
 
 
 def ancestors(net: BayesNet, node: str) -> frozenset[str]:
