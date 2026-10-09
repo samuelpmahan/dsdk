@@ -71,3 +71,11 @@ Stubs and tests are in place (src/dsdk/prob/ask.py, tests/integration/test_prob_
 | any | ops/tasks/T61-graph-witness-proofs.md | tests/integration/test_graph_proofs.py | none | `witness_proof`, `unreachability_countermodel`, `entailed_by_known_edges` in `src/dsdk/graph/proofs.py`: a graph read as implications; a witness path becomes a modus-ponens proof checked by `dsdk.logic.check`; non-reachability becomes a countermodel checked by `logic.evaluate`, `entails` and `countermodel` |
 
 Stub, tests (33, exhaustive up to 3 nodes plus a sample of 4-node graphs, Hypothesis on 5-node graphs with mixed edge evidence) and exports are in place. Only KNOWN edges ever become premises (same rule as `reachable`'s KNOWN True). Touches only the new module proofs.py; no other graph file needs editing.
+
+## Probability: exact interval with guaranteed coverage (promoted dream, 2026-10-09)
+
+| Wave | Card file | Done command (tests) | Depends | What it builds |
+|---|---|---|---|---|
+| any | ops/tasks/T62-prob-exact-interval.md | tests/prob/test_exact_interval.py | none | `exact_interval(successes, trials, confidence=0.95)` in `src/dsdk/prob/sampling.py`: Clopper-Pearson by 60 exact-rational (Fraction) bisections of the binomial tails, ends rounded outward, so coverage is at least the stated level for every n and p |
+
+Stub, 53 tests and export are in place. The tests pin 5/10, 0/10 and 33/35, check the tail equations with independent exact arithmetic, check exact coverage over a 1,000-point grid (where Wilson drops to about 84%), and compare with the Lab's JavaScript `exact()` extracted verbatim from lab/src/lab.html (skipped without node). New Proof 8 in tracks/A3/PROOFS.md gives the coverage argument. Touches only sampling.py.

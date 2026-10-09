@@ -14,7 +14,8 @@ Because ``u < 1.0 == cum[-1]``, ``index`` is a valid position, and a zero-weight
 Monte Carlo error. An :class:`Estimate` of a probability from ``trials`` Bernoulli trials with ``successes`` hits has
 ``p_hat = successes / trials``, standard error ``sqrt(p_hat * (1 - p_hat) / trials)`` and a 95% Wilson score interval
 (``Z95``). The Wilson interval is used because the plain ``p_hat +/- 1.96*se`` interval collapses to a point when
-``p_hat`` is 0 or 1.
+``p_hat`` is 0 or 1. CAUTION: the Wilson interval is only approximately 95%: its exact coverage for rare events is about 84%
+(tracks/A3/PROOFS.md, Proof 5). Use :func:`exact_interval` (Clopper-Pearson) when coverage must be guaranteed.
 """
 from __future__ import annotations
 
@@ -30,6 +31,7 @@ from dsdk.graph import topological_order
 from dsdk.logic import Formula, evaluate, variables
 
 from .bayesnet import BayesNet
+from .exact import to_prob
 from .worlds import Belief, probability
 
 Z95 = 1.96
@@ -296,3 +298,44 @@ def forward_sample(net: BayesNet, n: int, seed: int) -> tuple[tuple[tuple[str, b
             value[node] = rng.random() < float(p)
         samples.append(tuple((name, value[name]) for name in sorted(value)))
     return tuple(samples)
+
+
+EXACT_BISECTION_STEPS = 60
+"""Number of halvings of [0, 1] used by :func:`exact_interval` (bracket width ``2**-60``, below one double near 0.5)."""
+
+
+def _binom_tail_ge(n: int, k: int, p: Fraction) -> Fraction:
+    """Exact ``P(X >= k)`` for ``X ~ Binomial(n, p)`` with rational ``p`` (``Fraction`` arithmetic, no rounding)."""
+    raise NotImplementedError
+
+
+def _binom_tail_le(n: int, k: int, p: Fraction) -> Fraction:
+    """Exact ``P(X <= k)`` for ``X ~ Binomial(n, p)`` with rational ``p``."""
+    raise NotImplementedError
+
+
+def exact_interval(successes: int, trials: int, confidence: object = 0.95) -> tuple[float, float]:
+    """The exact (Clopper-Pearson) two-sided confidence interval for a binomial proportion, with GUARANTEED coverage.
+
+    Definition. With ``k = successes``, ``n = trials`` and ``a = 1 - confidence``: the lower end ``L`` solves ``P(X >= k | p = L) = a/2``
+    (``L = 0`` when ``k = 0``) and the upper end ``U`` solves ``P(X <= k | p = U) = a/2`` (``U = 1`` when ``k = n``), where ``X ~ Binomial(n, p)``.
+    For EVERY true proportion ``p`` and EVERY ``n`` the probability that ``[L(X), U(X)]`` contains ``p`` is at least ``confidence``
+    (unlike :func:`wilson_interval`, whose true coverage for rare events is only about 84 % at the 95 % label; see tracks/A3/PROOFS.md).
+
+    Method (exact rational arithmetic, no floating point inside the search). ``confidence`` is converted with ``dsdk.prob.exact.to_prob`` (so
+    ``0.95`` is exactly ``19/20``). The two binomial tails are evaluated EXACTLY as ``Fraction`` at rational ``p`` (``math.comb`` and ``Fraction``
+    powers). Each end is found by :data:`EXACT_BISECTION_STEPS` (60) halvings of ``[0, 1]`` with ``Fraction`` midpoints, keeping the bracket
+    ``[lo, hi]`` with ``tail(lo) < a/2 <= tail(hi)`` for the lower end (tail increasing in ``p``) and the mirror for the upper end. The
+    returned lower end is the bracket's LEFT end and the returned upper end is its RIGHT end, so the result is never narrower than the true
+    interval: coverage can only increase. The two ``Fraction`` ends are then converted to ``float`` and, if the conversion moved an end inward,
+    pushed one step outward with ``math.nextafter`` (toward 0 for the lower end, toward 1 for the upper end; the upper end is capped at 1.0). So
+    ``Fraction(low) <= L`` and ``Fraction(high) >= U`` hold exactly, and each end is within about ``2**-60 + 1 ulp`` of the true value.
+    ``k = 0`` returns ``low == 0.0`` and ``k = n`` returns ``high == 1.0`` exactly.
+
+    Cost: about ``2 * 60`` tail evaluations of ``n + 1`` terms each with big rationals; fine for ``trials`` up to a few hundred.
+
+    Arguments: ``trials`` an int >= 1, ``successes`` an int with ``0 <= successes <= trials`` (bool and floats are a ``TypeError``, range
+    errors a ``ValueError``, checked in the order trials, successes, then ``successes > trials``); ``confidence`` an int/Fraction/float
+    strictly between 0 and 1 (``to_prob`` rules for type and finiteness; exactly 0 or 1 is a ``ValueError``).
+    """
+    raise NotImplementedError

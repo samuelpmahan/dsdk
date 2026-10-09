@@ -106,7 +106,8 @@ rejection sampling with evidence `e`, given `N_e = m >= 1` accepted draws, those
 (d) The Wilson interval has asymptotic coverage 95 %. For finite `n` the exact coverage (summing binomial probabilities) dips below the label. On the audit's grid of true `p` from 0.01 to 0.99 in
 steps of 0.01 the smallest values are 90.4 % at `n = 10` (at `p = 0.01`), 93.0 % at `n = 30` (at `p = 0.3`) and 92.1 % at `n = 100` (at `p = 0.01`). Those
 are minima over a coarse grid. Coverage oscillates sharply for small `p`, and on a grid of step 0.0005 I measured lower minima: 83.8 % at `n = 10` (near `p = 0.0175`),
-84.8 % at `n = 30` (near `p = 0.0055`) and 86.1 % at `n = 100` (near `p = 0.0015`). So a reader of "95 %" can be off by 5 points at moderate `p` and by about 10
+84.8 % at `n = 30` (near `p = 0.0055`) and 86.1 % at `n = 100` (near `p = 0.0015`). Opus re-checked with step 0.00005 and the real `wilson_interval`: 83.5 % at `n = 10`, 83.7 % at `n = 30`, 83.9 % at `n = 100`. All of these are GRID minima; the
+true minimum over all real `p` can sit slightly lower still. So a reader of "95 %" can be off by 5 points at moderate `p` and by about 10
 points for rare events, at the sample sizes the Lab uses; the tests only assert empirical coverage within a band over seeds.
 
 *Proof.* (a,b) `S ~ Binomial(n, p)` because the indicator `1[X_j ⊨ q]` is Bernoulli(p) and independent. `E[S] = np`,
@@ -157,6 +158,21 @@ rare transitions (`q < 1/|V|`) and downward for common ones. That bias is the pr
 unseen transition; `test_larger_alpha_flattens_towards_uniform` and `test_smaller_alpha_is_better_on_training_pairs_larger_on_unseen_ones`
 pin the behaviour the correct analysis predicts (variance falls, bias grows with `alpha`). With `alpha = 0` the estimator is unbiased
 whenever `n_x > 0`, but then rows with `n_x = 0` have no value at all, which is why the contract answers UNKNOWN there.
+
+## Proof 8 -- the exact (Clopper-Pearson) interval has coverage at least `1 - a` for every `p` and every `n`
+
+**Claim.** For `X ~ Binomial(n, p)` let `L(k)` be the solution of `P(X >= k; L) = a/2` (`L(0) = 0`) and `U(k)` the solution of `P(X <= k; U) = a/2`
+(`U(n) = 1`). Then for every `p` in `[0, 1]`, `P(L(X) <= p <= U(X)) >= 1 - a`. `exact_interval` returns bounds that are at least as wide
+as `[L(k), U(k)]`, so its coverage is at least that.
+
+*Proof.* `p -> P(X >= k; p)` is non-decreasing and continuous (it is a polynomial in `p` that equals the probability that a Beta(k, n-k+1) variable is at most `p`), so
+`L(k) > p` iff `P(X >= k; p) < a/2`. Fix `p`. The set `K = {k : P(X >= k; p) < a/2}` is an upper set (if `k` is in it, so is every larger `k`, because
+`P(X >= k; p)` is non-increasing in `k`). If `K` is empty, `P(L(X) > p) = 0`. Otherwise let `k0` be its smallest element: `P(L(X) > p) = P(X >= k0; p) < a/2`.
+The mirror argument gives `P(U(X) < p) < a/2` (it uses `P(X <= k; p)`, non-increasing in `p` and non-decreasing in `k`). The two bad events are disjoint
+(`L(X) <= U(X)`), so the miss probability is below `a` and the coverage above `1 - a`. *Computation.* The code evaluates the tails exactly in rationals, bisects 60 times, keeps the
+bracket end that is on the safe side (lower end: left end; upper end: right end) and, after converting to floats, moves an end outward with `nextafter` if the conversion moved it inward;
+widening an interval can only add coverage. ∎ *Contrast:* the Wilson interval is the set of `p0` accepted by an approximate (normal) test; no such inequality holds for it, and its measured coverage dips to
+about 84 % for rare events (Proof 5).
 
 ---
 
