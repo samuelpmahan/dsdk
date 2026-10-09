@@ -28,7 +28,23 @@ def from_formula(f: logic.Formula) -> calc.Expr:
     variable). ``TypeError`` if ``f`` is not a ``logic.Formula``. Must work on formulas nested 200 levels deep
     (see the depth convention in dsdk.logic.formula / dsdk.lang.calc).
     """
-    raise NotImplementedError
+    if not isinstance(f, logic.Formula):
+        raise TypeError(f"from_formula expects a logic.Formula, not {type(f).__name__}")
+    if isinstance(f, logic.Const):
+        return calc.BoolLit(f.value)
+    if isinstance(f, logic.Var):
+        return calc.Var(f.name)
+    if isinstance(f, logic.Not):
+        return calc.Not(from_formula(f.operand))
+    if isinstance(f, logic.And):
+        return calc.BinOp("and", from_formula(f.left), from_formula(f.right))
+    if isinstance(f, logic.Or):
+        return calc.BinOp("or", from_formula(f.left), from_formula(f.right))
+    if isinstance(f, logic.Implies):
+        return calc.BinOp("or", calc.Not(from_formula(f.left)), from_formula(f.right))
+    if isinstance(f, logic.Iff):
+        return calc.BinOp("==", from_formula(f.left), from_formula(f.right))
+    raise TypeError(f"unsupported logic formula: {type(f).__name__}")
 
 
 def bind_assignment(e: calc.Expr, assignment: Mapping[str, bool]) -> calc.Expr:
@@ -37,7 +53,13 @@ def bind_assignment(e: calc.Expr, assignment: Mapping[str, bool]) -> calc.Expr:
     ``Let("a", BoolLit(True), Let("b", BoolLit(False), e))``; an empty assignment returns ``e`` itself.
     A value that is not exactly a ``bool`` is a ``TypeError`` (like ``logic.evaluate``). Extra names are bound too (harmless).
     """
-    raise NotImplementedError
+    for name in assignment:
+        if type(assignment[name]) is not bool:
+            raise TypeError(f"assignment value for {name!r} must be a bool, not {type(assignment[name]).__name__}")
+    out = e
+    for name in sorted(assignment, reverse=True):
+        out = calc.Let(name, calc.BoolLit(assignment[name]), out)
+    return out
 
 
 def trace_into_pxc(expr: calc.Expr, store: PxC, prefix: str) -> Part:
@@ -70,4 +92,38 @@ def trace_into_pxc(expr: calc.Expr, store: PxC, prefix: str) -> Part:
     ``store`` must be a ``PxC`` (``TypeError``) and ``expr`` a ``calc.Expr`` (``TypeError``).
     A stuck program is traced too: the last record's outcome is ``"stuck"``.
     """
-    raise NotImplementedError
+    if not isinstance(prefix, str):
+        raise TypeError(f"prefix must be a str, not {type(prefix).__name__}")
+    if not prefix:
+        raise ValueError("prefix must be a non-empty str")
+    if not isinstance(store, PxC):
+        raise TypeError(f"store must be a PxC, not {type(store).__name__}")
+    if not isinstance(expr, calc.Expr):
+        raise TypeError(f"expr must be a calc.Expr, not {type(expr).__name__}")
+
+    steps = calc.trace(expr)
+    with store.tick(prefix) as tx:
+        head = tx.compose(f"px.{prefix}.0", Part(_load), {"program": Part(calc.to_source(expr))})
+        step_part = Part(_advance)
+        for i in range(1, len(steps)):
+            head = tx.compose(f"px.{prefix}.{i}", step_part, {"prev": head})
+    return head
+
+
+def _record(term: calc.Expr, index: int) -> dict:
+    """The plain-dict record stored as a Part's value (strings and ints only, never AST objects)."""
+    return {"index": index, "source": calc.to_source(term), "outcome": calc.classify(term).value}
+
+
+def _load(inputs: Mapping[str, str]) -> dict:
+    """Step 0: parse the program text and record the term it denotes."""
+    return _record(calc.parse_calc(inputs["program"]), 0)
+
+
+def _advance(inputs: Mapping[str, dict]) -> dict:
+    """Step i >= 1: parse the previous record's source, apply one small step, record the result."""
+    prev = inputs["prev"]
+    term = calc.step(calc.parse_calc(prev["source"]))
+    if term is None:
+        raise ValueError(f"no step applies to {prev['source']!r}")
+    return _record(term, prev["index"] + 1)

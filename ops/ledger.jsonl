@@ -34,3 +34,4 @@
 {"ts": 1791507011, "task": "T15", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 120, "tests_passed": 179, "tests_total": 179, "round": 9, "note": "F: formula parser, strict+relaxed+all_parses"}
 {"ts": 1791507026, "task": "T14", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 28, "tests_passed": 91, "tests_total": 91, "round": 9, "note": "F: big-step evaluate; properties 13/13"}
 {"ts": 1791507081, "task": "T11", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 120, "tests_passed": 146, "tests_total": 146, "round": 9, "note": "F: calc parser"}
+{"ts": 1791507178, "task": "T16", "model": "haiku", "attempt": 1, "outcome": "pass", "wall_s": 120, "tests_passed": 1338, "tests_total": 1338, "round": 10, "note": "F: bridge + A2 integration gate"}

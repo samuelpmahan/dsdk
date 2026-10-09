@@ -70,7 +70,7 @@ States: Proposed → Selected → Building → Evidence ready → Reviewed.
 |---|---|---|
 | A0 core | Evidence ready | 189 tests green. Next: evidence packet + browser capture of tick rollback receipts |
 | A1 logic | Evidence ready | 472 logic + 189 core tests green; browser evidence 29/29 (`tools/evidence/run.sh A1`); proofs audited twice. Next: Sonnet audit of PROOFS.md; evidence packet + browser captures (truth tables, countermodels, Wumpus worlds) |
-| A2 lang | Proposed | Sonnet contract: parser must round-trip `logic.to_str` |
+| A2 lang | Evidence pending | 1,338 lang tests green (T09–T16, all first try). Formulas parse back to A1 ASTs; Calc evaluation traces are PxC lineage chains. Next: proof audit (by W), Lab query bar |
 | A5 graph | Evidence pending | 273 graph tests green (T20–T26, all first try); dsdk now checks its own import graph with its own graph code. Next: proof audit (by F), "Six degrees" instrument (W) |
 | A3 prob | Proposed | Contract: weight `wumpus_kb` models; reproduce 4/9, 4/9, 1/9 |
 | A4 geom | Proposed | — |
