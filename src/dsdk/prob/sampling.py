@@ -194,7 +194,15 @@ def sample_worlds(b: Belief, n: int, seed: int) -> Judgment:
     yields a zero-weight world. ``TypeError`` for a non-Belief, bad ``n``/``seed`` as in ``inverse_cdf_draws``
     (checked even when the belief is INVALID: argument errors first).
     """
-    raise NotImplementedError
+    if not isinstance(b, Belief):
+        raise TypeError(f"sample_worlds() takes a Belief, not {type(b).__name__}")
+    _check_int(n, "n", 0)
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise TypeError(f"seed must be an int, not {type(seed).__name__}")
+    if b.total == 0:
+        return Judgment(Status.INVALID, None, "belief has zero total weight: nothing to sample")
+    picks = inverse_cdf_draws([w.weight for w in b.worlds], n, seed)
+    return Judgment(Status.KNOWN, tuple(b.worlds[i].values for i in picks), "")
 
 
 def estimate_probability(b: Belief, query: Formula, n: int, seed: int, given: Formula | None = None) -> Judgment:
@@ -211,7 +219,40 @@ def estimate_probability(b: Belief, query: Formula, n: int, seed: int, given: Fo
     * ``KNOWN``   the Estimate.
     ``TypeError`` for wrong argument types (including ``given``).
     """
-    raise NotImplementedError
+    if not isinstance(b, Belief):
+        raise TypeError(f"estimate_probability() takes a Belief, not {type(b).__name__}")
+    if not isinstance(query, Formula):
+        raise TypeError(f"query must be a Formula, not {type(query).__name__}")
+    if given is not None and not isinstance(given, Formula):
+        raise TypeError(f"given must be a Formula or None, not {type(given).__name__}")
+    _check_int(n, "n", 0)
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise TypeError(f"seed must be an int, not {type(seed).__name__}")
+    mentioned = set(variables(query))
+    if given is not None:
+        mentioned |= set(variables(given))
+    missing = mentioned - set(b.variables)
+    if missing:
+        return Judgment(Status.UNKNOWN, None, "unmodelled variables: " + ", ".join(sorted(missing)))
+    drawn = sample_worlds(b, n, seed)
+    if drawn.status is not Status.KNOWN:
+        return drawn
+    trials = 0
+    successes = 0
+    for world in drawn.value:
+        a = dict(world)
+        if given is not None and not evaluate(given, a):
+            continue
+        trials += 1
+        if evaluate(query, a):
+            successes += 1
+    if trials == 0:
+        return Judgment(
+            Status.UNKNOWN,
+            None,
+            "no draw satisfied the evidence: the sampler cannot tell impossible evidence from rare evidence",
+        )
+    return Judgment(Status.KNOWN, make_estimate(successes, trials, n), "")
 
 
 def compare_with_exact(b: Belief, query: Formula, n: int, seed: int, given: Formula | None = None) -> Judgment:
@@ -221,7 +262,13 @@ def compare_with_exact(b: Belief, query: Formula, n: int, seed: int, given: Form
     If the EXACT judgment is not KNOWN it is returned unchanged (exact failures win: impossible evidence stays INVALID even
     though the sampler would say UNKNOWN). Else if the SAMPLED judgment is not KNOWN it is returned unchanged.
     """
-    raise NotImplementedError
+    exact = probability(b, query, given)
+    if exact.status is not Status.KNOWN:
+        return exact
+    sampled = estimate_probability(b, query, n, seed, given)
+    if sampled.status is not Status.KNOWN:
+        return sampled
+    return Judgment(Status.KNOWN, make_comparison(exact.value, sampled.value), "")
 
 
 def forward_sample(net: BayesNet, n: int, seed: int) -> tuple[tuple[tuple[str, bool], ...], ...]:
@@ -234,4 +281,18 @@ def forward_sample(net: BayesNet, n: int, seed: int) -> tuple[tuple[tuple[str, b
     never true and a probability-1 node always is.) Exactly one ``rng.random()`` per node per sample, in that order.
     ``n`` int >= 0, ``seed`` int (bool rejected); ``TypeError`` for a non-BayesNet.
     """
-    raise NotImplementedError
+    if not isinstance(net, BayesNet):
+        raise TypeError(f"forward_sample() takes a BayesNet, not {type(net).__name__}")
+    _check_int(n, "n", 0)
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise TypeError(f"seed must be an int, not {type(seed).__name__}")
+    order = topological_order(net.structure)
+    rng = random.Random(seed)
+    samples = []
+    for _ in range(n):
+        value: dict[str, bool] = {}
+        for node in order:
+            p = net.cpts[node][tuple(value[q] for q in net.structure.predecessors(node))]
+            value[node] = rng.random() < float(p)
+        samples.append(tuple((name, value[name]) for name in sorted(value)))
+    return tuple(samples)

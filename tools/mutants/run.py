@@ -93,7 +93,7 @@ def kinds_for(node: ast.AST) -> list[str]:
         k.append("int+1")
     if isinstance(node, ast.Constant) and isinstance(node.value, bool):
         k.append("flip-bool")
-    if isinstance(node, (ast.Return,)) and node.value is not None:
+    if isinstance(node, (ast.Return,)) and node.value is not None and not (isinstance(node.value, ast.Constant) and node.value.value is None):
         k.append("return-none")
     return k
 

@@ -191,3 +191,19 @@ def test_deep_nesting_does_not_hit_the_recursion_limit():
     assert chain == IntLit(1)
     mixed = parse_calc("(1 + " * 200 + "1" + ")" * 200)
     assert to_source(mixed).count("(") == 200
+
+
+# ==== Error messages name only what is legal at that point (found by planted-bug testing) ====
+def test_error_after_an_operator_never_offers_let_or_if():
+    """After a binary operator only an operand may follow, so a parse error there lists operands and never `let` or `if`, which need parentheses in that position."""
+    with pytest.raises(ParseError) as info:
+        parse_calc("1 +")
+    assert info.value.expected == {"INT", "MINUS", "TRUE", "FALSE", "NAME", "LPAREN"}, (
+        f"expected exactly the operand starters, got {sorted(info.value.expected)}")
+
+
+def test_error_at_the_start_of_a_program_offers_let_and_if():
+    """At the start of a whole program `let` and `if` are legal, so an empty program's error lists them alongside the operand starters and `not`."""
+    with pytest.raises(ParseError) as info:
+        parse_calc("")
+    assert {"LET", "IF", "NOT"} <= set(info.value.expected), sorted(info.value.expected)

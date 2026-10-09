@@ -374,3 +374,18 @@ def test_import_graph_detects_an_import_cycle(tmp_path):
     assert find_cycle(g) == ("dsdk.a", "dsdk.b", "dsdk.a")
     with pytest.raises(CycleError):
         topological_order(g)
+
+
+# ==== Import graph: relative imports that climb out of the package (found by planted-bug testing) ====
+def test_import_graph_ignores_relative_imports_that_climb_past_the_top_package(tmp_path):
+    """A relative import that climbs above the top-level package (e.g. `from ... import x` two folders down) resolves to nothing in the package, so it adds no edge and does not crash."""
+    from dsdk.graph import import_graph
+    root = tmp_path / "pkg"
+    for sub in ("a", "b"):
+        (root / sub).mkdir(parents=True)
+        (root / sub / "__init__.py").write_text("")
+    (root / "__init__.py").write_text("")
+    (root / "a" / "deep.py").write_text("from ... import outside\nfrom .. import b\n")
+    g = import_graph(root)
+    assert list(g.nodes) == ["pkg.a", "pkg.b"]
+    assert [(e.source, e.target) for e in g.edges] == [("pkg.a", "pkg.b")], [(e.source, e.target) for e in g.edges]
