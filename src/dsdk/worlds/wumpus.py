@@ -42,7 +42,7 @@ from fractions import Fraction
 
 from dsdk.core import Judgment, Status
 from dsdk.logic import Not, Var, entails
-from dsdk.prob import ask, expectation, prior_belief
+from dsdk.prob import ask, exact_interval, expectation, prior_belief, to_prob  # noqa: F401  (exact_interval and to_prob: used by the new functions)
 from dsdk.lang import parse_formula
 
 Cell = tuple[int, int]
@@ -213,9 +213,28 @@ def stuck_risk(percepts: dict) -> Judgment:
     return Judgment(Status.KNOWN, StuckRisk(tuple(rows), ex.value), "")
 
 
-def provably_safe(percepts: dict) -> tuple[Cell, ...]:
+def exactly_one_wumpus_text(front: tuple[Cell, ...]) -> str:
+    """The fact "there is exactly one Wumpus, on a frontier square or off the frontier" as relaxed formula text over the variables
+    ``Wxy`` of the frontier squares (in the order given) and the extra variable ``WR`` (the Wumpus is on an unvisited square off the frontier).
+
+    The text is ``"(W12 | W21 | WR)"`` (the disjunction of ALL these variables, ``WR`` last) followed by ``" & ~(a & b)"`` for every pair
+    ``(a, b)`` of the variables, pairs in order (first variable against each later one, then the second, and so on), joined with ``" & "``.
+    Example: ``exactly_one_wumpus_text(((1, 2), (2, 1)))`` is
+    ``"(W12 | W21 | WR) & ~(W12 & W21) & ~(W12 & WR) & ~(W21 & WR)"``. An empty ``front`` gives ``"(WR)"`` (no pairs). This is the same fact the
+    probability model of :func:`stuck_risk` uses, so logic and probability can be compared on equal terms.
+    """
+    raise NotImplementedError
+
+
+def provably_safe(percepts: dict, *, exactly_one_wumpus: bool = False) -> tuple[Cell, ...]:
     """Frontier squares that the knowledge base ENTAILS to be pit-free and Wumpus-free, by ``dsdk.logic.entails`` over the sentences parsed
-    with ``dsdk.lang.parse_formula(relaxed=True)`` (the pit sentences decide pits and the Wumpus sentences decide the Wumpus), in ``(x, y)`` order."""
+    with ``dsdk.lang.parse_formula(relaxed=True)`` (the pit sentences decide pits and the Wumpus sentences decide the Wumpus), in ``(x, y)`` order.
+
+    ``exactly_one_wumpus`` (default ``False``, which is the page's logic agent and must give exactly the answers of the version without this
+    option): when ``True`` the Wumpus knowledge also contains the fact of :func:`exactly_one_wumpus_text` for the current frontier (one more
+    formula, parsed the same way). That fact lets logic rule out squares that two overlapping stenches cannot both explain: with stenches at
+    (1,2) and (2,1) the Wumpus must be on (2,2), so (1,3) and (3,1) become provably safe. With the option on, a frontier square is provably
+    safe EXACTLY when :func:`stuck_risk` gives it ``death == 0`` (logic and probability agree). ``TypeError`` if ``exactly_one_wumpus`` is not a bool."""
     pit_formulas = [parse_formula(s, relaxed=True) for s in knowledge(percepts)[0]]
     wumpus_formulas = [parse_formula(s, relaxed=True) for s in knowledge(percepts)[1]]
     return tuple(
@@ -232,7 +251,7 @@ class AgentRun:
     gambles: tuple[Cell, ...]
 
 
-def run_agent(cave: Cave, *, probabilistic: bool = False) -> AgentRun:
+def run_agent(cave: Cave, *, probabilistic: bool = False, exactly_one_wumpus: bool = False, risk_limit: object = None) -> AgentRun:
     """Play one cave. Starting on (1,1) with its percept:
     1. a square with glitter while the gold is not carried: take the gold;
     2. carrying the gold: leave -> ``"escaped with gold"``;
@@ -243,7 +262,17 @@ def run_agent(cave: Cave, *, probabilistic: bool = False) -> AgentRun:
        ``death == 1``, and if any remain steps onto the one with the smallest ``death`` (ties: smallest ``(x, y)``), appending it to ``gambles``;
        entering a pit or the Wumpus square ends the run with ``"died"``, otherwise the square is visited and the loop continues; if none remain it
        leaves empty-handed.
-    ``stuck`` holds a copy of the percepts dict at each stuck moment (cell -> Percept)."""
+    ``stuck`` holds a copy of the percepts dict at each stuck moment (cell -> Percept).
+    Options (the defaults reproduce the behaviour described above exactly, so the page's agents and every earlier number are unchanged):
+    * ``exactly_one_wumpus``: passed to :func:`provably_safe` (step 3 and the stuck test use the stronger logic). ``False`` by default.
+    * ``risk_limit``: ``None`` (default) or a number between 0 and 1 inclusive, converted with ``dsdk.prob.to_prob`` (so ``0.2`` is exactly 1/5; its
+      ``TypeError``/``ValueError`` propagate for a bool, a string, a negative number or one above 1). In step 4 the probabilistic agent only considers
+      frontier squares with ``death < 1`` AND (when a limit is given) ``death <= risk_limit``; if none qualify it leaves empty-handed. A limit of 1 therefore
+      behaves exactly like ``None`` (certain death is never chosen), and a limit of 0 steps only on squares with zero risk. ``risk_limit`` is only
+      meaningful for the probabilistic agent: giving a limit with ``probabilistic=False`` raises ``ValueError("risk_limit needs probabilistic=True")``
+      (after the limit itself has been validated). A limited agent either picks the same square as the unlimited one or stops, so every stuck state it
+      reaches is also reached by the unlimited probabilistic agent on the same cave.
+    """
     percepts: dict = {START: percept(cave, START, False)}
     here = START
     has_gold = False
@@ -284,8 +313,9 @@ class Rates:
     empty: int
 
 
-def sweep_rates(seeds, *, probabilistic: bool) -> Rates:
-    """Outcome counts over ``seeded_cave(s)`` for each seed: how many died, escaped with gold, climbed out empty-handed."""
+def sweep_rates(seeds, *, probabilistic: bool, exactly_one_wumpus: bool = False, risk_limit: object = None) -> Rates:
+    """Outcome counts over ``seeded_cave(s)`` for each seed: how many died, escaped with gold, climbed out empty-handed. The two options are passed
+    unchanged to :func:`run_agent` (defaults reproduce the earlier counts: logic-only 0/71/229, probabilistic 146/133/21 died/gold/empty over seeds 1 to 300)."""
     caves = died = gold = empty = 0
     for s in seeds:
         caves += 1
@@ -299,6 +329,42 @@ def sweep_rates(seeds, *, probabilistic: bool) -> Rates:
     return Rates(caves, died, gold, empty)
 
 
+RISK_LIMITS = (Fraction(0), Fraction(1, 10), Fraction(1, 5), Fraction(1, 3), Fraction(1, 2), Fraction(1))
+"""The default risk limits of :func:`risk_curve`."""
+
+
+@dataclass(frozen=True)
+class CurvePoint:
+    """One point of the risk curve: the probabilistic agent with ``risk_limit == limit`` over ``caves`` seeded caves.
+
+    ``died`` / ``gold`` / ``empty`` are the outcome counts (they add up to ``caves``). ``death_low`` / ``death_high`` and ``gold_low`` /
+    ``gold_high`` are the ends of the exact (Clopper-Pearson) 95% intervals for the death rate ``died / caves`` and the gold rate ``gold / caves``,
+    taken UNCHANGED from :func:`dsdk.prob.exact_interval`.
+    """
+
+    limit: Fraction
+    caves: int
+    died: int
+    gold: int
+    empty: int
+    death_low: float
+    death_high: float
+    gold_low: float
+    gold_high: float
+
+
+def risk_curve(seeds=range(1, 301), limits=RISK_LIMITS, *, exactly_one_wumpus: bool = False) -> tuple[CurvePoint, ...]:
+    """How much death buys how much gold: one :class:`CurvePoint` per limit, in the order of ``limits``.
+
+    For each limit run :func:`sweep_rates` with ``probabilistic=True`` and ``risk_limit=limit`` over ``seeds`` (every limit is validated by
+    :func:`run_agent`; ``exactly_one_wumpus`` is passed on), then ask ``dsdk.prob.exact_interval(died, caves)`` and
+    ``dsdk.prob.exact_interval(gold, caves)`` (95%). This function does no interval arithmetic of its own. Each ``exact_interval`` call costs several seconds at 300 caves, so the result for a given ``(count, caves)`` pair may be remembered in a module-level dict and reused (the same counts recur across limits and calls). ``limit`` in the result is the limit
+    converted with ``dsdk.prob.to_prob``. ``seeds`` is consumed once (a range or any iterable of ints); no seeds at all raises ``ValueError("risk_curve
+    needs at least one seed")``. Over seeds 1 to 300 with the default limits the (died, gold) pairs are (0, 79), (0, 79), (3, 86), (21, 102), (32, 109), (146, 133).
+    """
+    raise NotImplementedError
+
+
 def frac(x: Fraction) -> str:
     return f"{x.numerator}/{x.denominator}"
 
@@ -309,7 +375,11 @@ def lab_data(seeds=range(1, 301)) -> dict:
     ``{"pit_prior": "1/5", "states": {state_key: {"frontier": [[name, pit, wumpus, death], ...], "expected_pits": "a/b"}}, "rates": {"logic": {...}, "probabilistic": {...}}}``
     with every fraction as ``"numerator/denominator"`` text. ``states`` holds one entry for every stuck state (``state_key`` of the stuck percepts) reached by
     EITHER agent on the demo cave and on ``seeded_cave(s)`` for each seed, deduplicated by key; each entry is :func:`stuck_risk` of that state. ``rates`` has
-    ``{"caves", "died", "gold", "empty"}`` over ``seeds`` for the logic-only and the probabilistic agent (:func:`sweep_rates`)."""
+    ``{"caves", "died", "gold", "empty"}`` over ``seeds`` for the logic-only and the probabilistic agent (:func:`sweep_rates`).
+
+    It ALSO has ``"curve"``: the :func:`risk_curve` over ``seeds`` with the default limits, as a list of
+    ``{"limit": "a/b", "caves", "died", "gold", "empty", "death": [low, high], "gold_ci": [low, high]}`` (limits as :func:`frac` text, intervals as floats).
+    The states table does not need new entries for the curve: a limited agent only reaches stuck states that the unlimited probabilistic agent reaches."""
     states: dict = {}
     for cave in [demo_cave()] + [seeded_cave(s) for s in seeds]:
         for prob in (False, True):

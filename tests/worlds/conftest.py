@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-LIMIT_SECONDS = 60
+LIMIT_SECONDS = 240
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "worlds"
 
 

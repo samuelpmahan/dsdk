@@ -172,7 +172,7 @@ footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;fl
       </div>
     </div>
     <div style="padding:0 18px 18px;display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-width:0"><div class="controls"><button id="sweep2" type="button" class="primary">Should the agent gamble? Play both agents on the same 300 caves</button></div>
-    <div id="sweep2-out" aria-live="polite"></div></div>
+    <div id="sweep2-out" aria-live="polite"></div><div class="controls"><button id="curve-btn" type="button">Draw the risk curve: how much death buys how much gold (seeds 1 to 300)</button></div><div id="curve-out" aria-live="polite"></div></div>
     <details class="how">
       <summary>How do we know?</summary>
       <div class="body">
@@ -345,6 +345,7 @@ function goHome(why){
 // ---------- Probability rung: dsdk.prob's numbers (built into the page) and this page's own recomputation ----------
 const PIT_P = 0.2;
 let probMode = false;
+let riskLimit = null;   // null = no limit; otherwise the largest chance of death the probabilistic agent will accept
 const rungCheck = { agree:0, disagree:0, missing:0 };
 const rungCache = new Map();
 const CR = () => (LAB.cave_rung && LAB.cave_rung.states) ? LAB.cave_rung : null;
@@ -383,7 +384,7 @@ function compareRung(rt){
 function noteStuck(){ const rt=riskTable(), c=compareRung(rt); if (c.status in rungCheck) rungCheck[c.status]++; return rt; }
 function isStuck(){ return agent.outcome!=='died' && !agent.hasGold && frontier().length>0 && ![...verdicts.values()].some(v=>v.safe); }
 function gamble(){
-  const rt=noteStuck(), opts=rt.rows.filter(r=>r.death<1-1e-9);
+  const rt=noteStuck(), opts=rt.rows.filter(r=>r.death<1-1e-9 && (riskLimit===null || r.death<=riskLimit+1e-9));
   if (!opts.length) return false;
   let best=opts[0]; for (const r of opts) if (r.death<best.death-1e-9) best=r;
   const target=best.cell, p=pathTo(target, agent.visited), risk=Math.round(best.death*100);
@@ -513,6 +514,38 @@ $('#sweep2').addEventListener('click',()=>{
   $('#sweep2-out').replaceChildren(el('div',{class:'tablewrap'},tbl),
     el('p',{id:'stuck-check',style:'margin:6px 0 0',text:cr?`Stuck states met in the sweeps: ${rungCheck.agree} agree with dsdk's table, ${rungCheck.disagree} disagree, ${rungCheck.missing} not in the table.`:"dsdk's table of risk numbers is not built into this page yet, so the stuck states were not compared."}),
     el('p',{style:'margin:6px 0 0;color:var(--muted)',text:'Both agents ran on the same 300 random caves. Gambling finds the gold more often and costs lives; the logic-only agent never dies. dsdk computed its columns when the page was built.'}));
+});
+
+// ---------- Risk curve: the probabilistic agent under a risk limit; dsdk's counts and exact intervals vs this page's recomputation ----------
+const CURVE_LIMITS = ['0/1','1/10','1/5','1/3','1/2','1/1'];
+$('#curve-btn').addEventListener('click',()=>{
+  const was=[probMode,riskLimit], cr=CR(), dsdk=cr&&cr.curve ? new Map(cr.curve.map(c=>[c.limit,c])) : new Map();
+  const pts=[];
+  try{ probMode=true; for (const lim of CURVE_LIMITS){ riskLimit=toNum(lim); const r=sweep(300); pts.push({lim, r, d:exact(r.died,r.n), g:exact(r.gold,r.n)}); } }
+  finally { [probMode,riskLimit]=was; }
+  let allOk=true; const rows=pts.map(({lim,r,d,g})=>{
+    const c=dsdk.get(lim);
+    const ok=c && c.died===r.died && c.gold===r.gold && c.empty===r.empty && Math.abs(c.death[0]-d[0])<1e-7 && Math.abs(c.death[1]-d[1])<1e-7 && Math.abs(c.gold_ci[0]-g[0])<1e-7 && Math.abs(c.gold_ci[1]-g[1])<1e-7;
+    if (c && !ok) allOk=false;
+    const iv=(a)=>`${(100*a[0]).toFixed(1)}–${(100*a[1]).toFixed(1)}%`;
+    return el('tr',{},el('td',{text:lim==='1/1'?'no limit (1)':lim==='0/1'?'0 (zero risk only)':lim}),el('td',{text:`${r.died} (${iv(d)})`}),el('td',{text:`${r.gold} (${iv(g)})`}),el('td',{text:String(r.empty)}),
+      el('td',{text:c?`${c.died} / ${c.gold} · ${iv(c.death)} · ${iv(c.gold_ci)}`:'not built yet'}),el('td',{class:'curve-check','data-agree':c?String(!!ok):'n/a',text:c?(ok?'agree':'DISAGREE'):'n/a'}));
+  });
+  const head=['Risk limit','Died (exact 95% interval)','Escaped with gold (exact 95% interval)','Climbed out empty','dsdk says (died / gold · intervals)','Page recomputes'];
+  const tbl=el('table',{id:'curve-table'},el('thead',{},el('tr',{},...head.map(h=>el('th',{text:h})))),el('tbody',{},...rows));
+  // scatter: x = death rate, y = gold rate, with the intervals as bars
+  const W=520,H=300,L=52,B=40,T=14,R=16, sx=v=>L+(W-L-R)*v, sy=v=>H-B-(H-B-T)*v;
+  let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gold rate against death rate for each risk limit, with exact 95% intervals">`;
+  for (const t of [0,0.25,0.5,0.75,1]){ svg+=`<line x1="${sx(t)}" x2="${sx(t)}" y1="${T}" y2="${H-B}" stroke="var(--rule)"/><line x1="${L}" x2="${W-R}" y1="${sy(t)}" y2="${sy(t)}" stroke="var(--rule)"/><text x="${sx(t)}" y="${H-B+16}" text-anchor="middle" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="11">${Math.round(t*100)}%</text><text x="${L-6}" y="${sy(t)+4}" text-anchor="end" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="11">${Math.round(t*100)}%</text>`; }
+  pts.forEach(({lim,r,d,g},i)=>{ const x=sx(r.died/r.n), y=sy(r.gold/r.n);
+    svg+=`<line x1="${sx(d[0])}" x2="${sx(d[1])}" y1="${y}" y2="${y}" stroke="var(--amber)" stroke-opacity=".6"/><line x1="${x}" x2="${x}" y1="${sy(g[0])}" y2="${sy(g[1])}" stroke="var(--amber)" stroke-opacity=".6"/><circle cx="${x}" cy="${y}" r="5" fill="var(--safe)"><title>limit ${lim}: ${r.died} died, ${r.gold} gold of ${r.n}</title></circle><text x="${x+8}" y="${y-8}" fill="var(--ink)" font-family="JetBrains Mono, monospace" font-size="11">${lim==='1/1'?'1':lim==='0/1'?'0':lim}</text>`; });
+  svg+=`<text x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="11">caves where the agent died</text><text x="12" y="${(T+H-B)/2}" fill="var(--muted)" font-family="JetBrains Mono, monospace" font-size="11" transform="rotate(-90 12 ${(T+H-B)/2})" text-anchor="middle">caves where it escaped with gold</text></svg>`;
+  const chart=el('div',{class:'chart',id:'curve-chart'}); chart.innerHTML=svg;
+  const note = !dsdk.size ? 'dsdk has not built this curve into the page yet, so only the page recomputation is shown.'
+    : allOk ? 'Every row agrees with dsdk: the same counts and the same exact intervals.' : 'At least one row DISAGREES with dsdk.';
+  $('#curve-out').replaceChildren(el('div',{class:'tablewrap'},tbl),chart,
+    el('p',{id:'curve-note',style:'margin:6px 0 0',text:note}),
+    el('p',{style:'margin:6px 0 0;color:var(--muted)',text:'Each point is the probabilistic agent with a risk limit: it only steps on a frontier square whose chance of death is at most the limit. Bars are exact 95% intervals (Clopper-Pearson) for each rate, computed by dsdk.prob.exact_interval and recomputed here. A limit of 0 already beats the logic-only agent because it uses the fact that there is exactly one Wumpus.'}));
 });
 
 // ---------- Build Observatory ----------

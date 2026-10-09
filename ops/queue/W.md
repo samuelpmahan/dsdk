@@ -41,3 +41,9 @@ Test file sizes: all of tests/worlds takes ~30 s. Haiku must NOT edit tests/worl
 - [T56] ops/tasks/T56-worlds-wumpus-caves.md   done: `.venv/bin/python -m pytest tests/worlds/test_worlds_wumpus.py -q -k "random_stream or demo_cave_is or seeded_caves or neighbours or percepts_in_the_demo or frontier_is or knowledge_sentences or square_without or state_key"`
 - [T57] ops/tasks/T57-worlds-wumpus-rung.md    done: `.venv/bin/python -m pytest tests/worlds/test_worlds_wumpus.py -q`   (after T56; same file)
   tools/lab/build_lab.py calls dsdk.worlds.wumpus.lab_data(); until T57 lands the Lab shows the pending state.
+
+## READY (Opus, 2026-10-09): free gold and the risk frontier (two cards, same file, run in this order)
+- [T58] ops/tasks/T58-worlds-wumpus-free-gold.md   done: `.venv/bin/python -m pytest tests/worlds/test_worlds_wumpus_limits.py -q -k "exactly_one_text or default_logic_is_unchanged or two_overlapping or probability_agrees or with_the_option or exactly_one_agent_is_stuck or default_logic_agent_still or exactly_one_logic_agent_finds"` and `.venv/bin/python -m pytest tests/worlds/test_worlds_wumpus.py -q`
+- [T59] ops/tasks/T59-worlds-wumpus-risk-curve.md  done: `.venv/bin/python -m pytest tests/worlds/test_worlds_wumpus_limits.py tests/worlds/test_worlds_wumpus.py -q`  (about 2 minutes)
+  Both edit ALREADY-IMPLEMENTED functions in src/dsdk/worlds/wumpus.py (provably_safe, run_agent, sweep_rates, lab_data): the contract kept the old bodies and added the new signatures, docstrings and tests, so the Haiku must start from the existing code.
+  The Lab page's curve section is already in lab/src/lab.html; until T59 lands it shows "not built yet" next to the page's own numbers.
