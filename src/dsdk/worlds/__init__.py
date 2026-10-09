@@ -7,9 +7,8 @@ Worlds
 ------
 * ``lostlands`` / ``networks``  Sam's Lost Lands 2018 DJ-set corpus: loader, provenance, graphs, "six degrees".
 * ``buildlog``                  ``ops/ledger.jsonl``: dsdk studying the agents that build it.
-* Wumpus world                  DEFERRED (W1 note, 2026-10-09): ``fixtures/logic/wumpus_kb.json`` is already
-                                consumed by dsdk.logic and A3 will weight it; a ``dsdk.worlds.wumpus`` module that
-                                loads the JS world is a later card.
+* ``wumpus``                    the Logic Cave: caves identical to the Lab page's, the logic-only agent, and the probability
+                                rung (exact P(pit) and P(Wumpus) per frontier square, asked as text of dsdk.prob).
 
 Read ``lostlands.py`` first (file format and epistemic stance), then ``networks.py`` (evidence vocabulary).
 """

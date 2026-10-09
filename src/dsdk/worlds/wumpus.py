@@ -1,0 +1,198 @@
+"""The Wumpus world for the Lab's Logic Cave: caves, percepts, the logic-only agent, and the probability rung that
+answers when the logic-only agent has nothing provably safe left.
+
+Squares are ``(x, y)`` tuples with ``1 <= x, y <= 4``; the agent starts on ``(1, 1)``. A square's text name is ``f"{x}{y}"``, so the
+propositional variables are ``P21`` (a pit at (2,1)) and ``W21`` (the Wumpus at (2,1)).
+
+The cave (identical, rule for rule, to the page ``lab/src/lab.html``)
+--------------------------------------------------------------------
+* ``demo_cave()``: pits at (3,1), (1,3), (3,4); Wumpus at (4,4); gold at (3,3).
+* ``seeded_cave(seed)``: the 15 squares other than (1,1) in the order ``y = 1..4`` outer, ``x = 1..4`` inner. A random stream is
+  ``mulberry32(seed)``. Each of the 15 squares in turn is a pit when ``rng() < 0.2`` (so a pit may share a square with the Wumpus or the
+  gold); then ``wumpus = cells[floor(rng() * 15)]``, then ``gold = cells[floor(rng() * 15)]``, in that order, three separate groups of draws.
+* Percepts at ``cell`` (``has_gold`` = the agent already carries the gold): ``breeze`` = some orthogonal neighbour is a pit;
+  ``stench`` = the Wumpus is on ``cell`` or on an orthogonal neighbour; ``glitter`` = the gold is on ``cell`` and ``has_gold`` is false.
+* A square kills the agent on entry when it is a pit or holds the Wumpus.
+
+What the agent knows
+--------------------
+Visited squares are known pit-free and Wumpus-free (the agent survived them). For each visited square ``v`` let ``open(v)`` be its
+UNVISITED neighbours, sorted by ``(x, y)``. The knowledge base is two lists of sentences in the relaxed formula text of
+``dsdk.lang.parse_formula``:
+* pit sentences: if ``v`` has a breeze, ``"P.. | P.. | ..."`` over ``open(v)`` (joined with ``" | "``); otherwise one sentence ``"~Pxy"`` for
+  each ``(x, y)`` in ``open(v)``;
+* Wumpus sentences: the same with ``W`` and the stench.
+Visited squares are taken in ``(x, y)`` order. The FRONTIER is the set of unvisited squares next to a visited one, sorted by ``(x, y)``.
+
+Probability model
+-----------------
+Pits are independent, each with prior ``PIT_PRIOR`` = 1/5 (the generator's 0.2), on the frontier squares; unvisited squares off the frontier
+cannot change a frontier square's posterior. The Wumpus is in exactly one UNVISITED square, uniformly. Only the frontier squares appear in any
+sentence, so the belief has one variable ``Wxy`` per frontier square plus ONE extra variable ``WR`` standing for "the Wumpus is on an unvisited square
+off the frontier"; exactly one of these variables is true, every such world has weight 1. This grouping does not change any frontier posterior: a
+stench sentence lists all of its visited square's unvisited neighbours, so it rules ``WR`` out, and when there is no stench anywhere every frontier
+``Wxy`` is ruled out and ``WR`` is the only world left. Pits and the Wumpus are independent, so
+P(death at c) = 1 - (1 - P(pit at c)) * (1 - P(Wumpus at c)).
+"""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from fractions import Fraction
+
+from dsdk.core import Judgment, Status
+from dsdk.logic import entails
+from dsdk.prob import ask, expectation, prior_belief
+from dsdk.lang import parse_formula
+
+Cell = tuple[int, int]
+SIZE = 4
+START: Cell = (1, 1)
+PIT_PRIOR = Fraction(1, 5)
+OUTCOMES = ("died", "escaped with gold", "climbed out empty-handed")
+
+
+def imul(a: int, b: int) -> int:
+    raise NotImplementedError
+
+
+def mulberry32(seed: int):
+    """The generator of the page (a 32-bit mulberry32): returns a function that gives floats in [0, 1) exactly as the JavaScript does."""
+    raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class Cave:
+    name: str
+    pits: frozenset
+    wumpus: Cell
+    gold: Cell
+
+
+def demo_cave() -> Cave:
+    raise NotImplementedError
+
+
+def seeded_cave(seed: int) -> Cave:
+    raise NotImplementedError
+
+
+def neighbours(cell: Cell) -> tuple[Cell, ...]:
+    raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class Percept:
+    breeze: bool
+    stench: bool
+    glitter: bool
+
+
+def percept(cave: Cave, cell: Cell, has_gold: bool) -> Percept:
+    raise NotImplementedError
+
+
+def name(cell: Cell) -> str:
+    raise NotImplementedError
+
+
+def frontier(visited) -> tuple[Cell, ...]:
+    raise NotImplementedError
+
+
+def knowledge(percepts: dict) -> tuple[list[str], list[str]]:
+    """(pit sentences, Wumpus sentences) for the visited squares in ``percepts`` (``{cell: Percept}``), as described in the module docstring."""
+    raise NotImplementedError
+
+
+def conjunction(sentences: list[str]) -> str:
+    raise NotImplementedError
+
+
+def state_key(percepts: dict) -> str:
+    """Canonical text of a knowledge state: for each visited square in ``(x, y)`` order ``f"{x}{y}{B or -}{S or -}"`` joined by ``";"``."""
+    raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class CellRisk:
+    cell: Cell
+    pit: Fraction
+    wumpus: Fraction
+    death: Fraction
+
+
+@dataclass(frozen=True)
+class StuckRisk:
+    frontier: tuple[CellRisk, ...]
+    expected_pits: Fraction
+
+
+
+def stuck_risk(percepts: dict) -> Judgment:
+    """Exact risk of each frontier square given what the agent perceived at the visited squares in ``percepts``.
+
+    ``KNOWN`` with a :class:`StuckRisk`: ``frontier`` has one :class:`CellRisk` per frontier square in ``(x, y)`` order:
+    ``pit = P(Pxy | pit sentences)`` over ``prior_belief({Pxy: PIT_PRIOR for each frontier square})``, ``wumpus = P(Wxy | Wumpus sentences)``
+    over the Wumpus belief of the module docstring (``prior_belief({}, exactly-one(frontier W's + WR))``), ``death = 1 - (1 - pit) * (1 - wumpus)``; ``expected_pits`` is ``dsdk.prob.expectation`` of the number of pits on the
+    frontier given the pit sentences. Every number is obtained by CALLING ``dsdk.prob`` (``ask`` with the sentences as TEXT, ``expectation``):
+    this function does no probability arithmetic beyond the ``death`` formula. An empty frontier gives ``KNOWN`` with ``frontier=()`` and
+    ``expected_pits == 0``. If the percepts are impossible (a zero-probability evidence, which no real cave produces) the answer is
+    ``INVALID`` with the reason of the first failing ``ask``. ``TypeError`` if ``percepts`` is not a dict of cell -> Percept.
+    """
+    raise NotImplementedError
+
+
+def provably_safe(percepts: dict) -> tuple[Cell, ...]:
+    """Frontier squares that the knowledge base ENTAILS to be pit-free and Wumpus-free, by ``dsdk.logic.entails`` over the sentences parsed
+    with ``dsdk.lang.parse_formula(relaxed=True)`` (the pit sentences decide pits and the Wumpus sentences decide the Wumpus), in ``(x, y)`` order."""
+    raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class AgentRun:
+    outcome: str
+    stuck: tuple[dict, ...]
+    gambles: tuple[Cell, ...]
+
+
+def run_agent(cave: Cave, *, probabilistic: bool = False) -> AgentRun:
+    """Play one cave. Starting on (1,1) with its percept:
+    1. a square with glitter while the gold is not carried: take the gold;
+    2. carrying the gold: leave -> ``"escaped with gold"``;
+    3. otherwise visit every provably safe frontier square (in ``(x, y)`` order, one at a time, re-deriving after each; the order cannot change
+       the final outcome because safety only grows with knowledge);
+    4. when nothing is provably safe the agent is STUCK: the current ``percepts`` map is appended to ``stuck``. The logic-only agent leaves empty-handed
+       (``"climbed out empty-handed"``). The probabilistic agent (``probabilistic=True``) asks :func:`stuck_risk`, drops frontier squares with
+       ``death == 1``, and if any remain steps onto the one with the smallest ``death`` (ties: smallest ``(x, y)``), appending it to ``gambles``;
+       entering a pit or the Wumpus square ends the run with ``"died"``, otherwise the square is visited and the loop continues; if none remain it
+       leaves empty-handed.
+    ``stuck`` holds a copy of the percepts dict at each stuck moment (cell -> Percept)."""
+    raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class Rates:
+    caves: int
+    died: int
+    gold: int
+    empty: int
+
+
+def sweep_rates(seeds, *, probabilistic: bool) -> Rates:
+    """Outcome counts over ``seeded_cave(s)`` for each seed: how many died, escaped with gold, climbed out empty-handed."""
+    raise NotImplementedError
+
+
+def frac(x: Fraction) -> str:
+    raise NotImplementedError
+
+
+def lab_data(seeds=range(1, 301)) -> dict:
+    """Everything the page needs, JSON-ready and small.
+
+    ``{"pit_prior": "1/5", "states": {state_key: {"frontier": [[name, pit, wumpus, death], ...], "expected_pits": "a/b"}}, "rates": {"logic": {...}, "probabilistic": {...}}}``
+    with every fraction as ``"numerator/denominator"`` text. ``states`` holds one entry for every stuck state (``state_key`` of the stuck percepts) reached by
+    EITHER agent on the demo cave and on ``seeded_cave(s)`` for each seed, deduplicated by key; each entry is :func:`stuck_risk` of that state. ``rates`` has
+    ``{"caves", "died", "gold", "empty"}`` over ``seeds`` for the logic-only and the probabilistic agent (:func:`sweep_rates`)."""
+    raise NotImplementedError
