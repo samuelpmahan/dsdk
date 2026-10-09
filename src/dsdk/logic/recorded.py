@@ -42,10 +42,17 @@ class StepCalculation:
     """
 
     def __init__(self, rule: Rule, formula: Formula, premises: tuple[Formula, ...]) -> None:
-        raise NotImplementedError
+        self.rule = rule
+        self.formula = formula
+        self.premises = premises
 
     def __call__(self, inputs: dict) -> Formula:
-        raise NotImplementedError
+        cited = [inputs[f"c{j}"] for j in range(len(inputs))]
+        mini = [Step(f, Rule.PREMISE, ()) for f in cited] + [Step(self.formula, self.rule, tuple(range(len(cited))))]
+        result = check(mini, list(cited) + list(self.premises))
+        if not result.ok:
+            raise ProofStepError(result.reason)
+        return self.formula
 
 
 @dataclass(frozen=True)
@@ -57,11 +64,16 @@ class RecordedProof:
 
     @property
     def conclusion(self) -> Part:
-        raise NotImplementedError
+        return self.parts[-1]
 
 
 def _check_args(store: object, prefix: object) -> None:
-    raise NotImplementedError
+    if not isinstance(store, PxC):
+        raise TypeError(f"store must be a PxC, not {type(store).__name__}")
+    if not isinstance(prefix, str):
+        raise TypeError(f"prefix must be a str, not {type(prefix).__name__}")
+    if _PREFIX.fullmatch(prefix) is None:
+        raise ValueError(f"prefix {prefix!r} is not an identifier ([A-Za-z_][A-Za-z0-9_]*)")
 
 
 def record_proof(store: PxC, prefix: str, proof: Sequence[Step], premises: Iterable[Formula]) -> Judgment:
@@ -78,7 +90,29 @@ def record_proof(store: PxC, prefix: str, proof: Sequence[Step], premises: Itera
       ``tick == "proof.<prefix>"``.
     * Other exceptions of the store propagate unchanged and roll the tick back: ``AddressOccupiedError`` if ``px.<prefix>.<i>`` is taken, ``TickInProgressError`` if a tick is open.
     """
-    raise NotImplementedError
+    _check_args(store, prefix)
+    if not isinstance(proof, Sequence) or isinstance(proof, (str, bytes)):
+        raise TypeError(f"proof must be a sequence of Step, not {type(proof).__name__}")
+    steps = list(proof)
+    if not all(isinstance(s, Step) for s in steps):
+        raise TypeError("proof must be a sequence of Step objects")
+    prem = tuple(premises)
+    if not all(isinstance(f, Formula) for f in prem):
+        raise TypeError("premises must all be Formula objects")
+    if not steps:
+        return Judgment(Status.INVALID, None, "empty proof: there is nothing to record")
+    result = check(steps, prem)
+    parts: list[Part] = []
+    try:
+        with store.tick(f"proof.{prefix}") as tx:
+            for i, step in enumerate(steps):
+                if not result.ok and i == result.bad_step:
+                    raise ProofStepError(result.reason)
+                inputs = {f"c{j}": parts[c] for j, c in enumerate(step.cites)}
+                parts.append(tx.compose(f"px.{prefix}.{i}", Part(StepCalculation(step.rule, step.formula, prem)), inputs))
+    except ProofStepError as exc:
+        return Judgment(Status.INVALID, None, str(exc))
+    return Judgment(Status.KNOWN, RecordedProof(prefix, tuple(parts)), "")
 
 
 def replay_proof(store: PxC, prefix: str) -> Judgment:
@@ -94,4 +128,32 @@ def replay_proof(store: PxC, prefix: str) -> Judgment:
     * finally ``dsdk.logic.check(steps, premises)``: ``KNOWN`` with the tuple of rebuilt ``Step`` objects when valid, ``INVALID`` with ``check``'s reason otherwise.
     For a proof recorded by ``record_proof`` the rebuilt steps EQUAL the original ones.
     """
-    raise NotImplementedError
+    _check_args(store, prefix)
+    parts: list[Part] = []
+    while store.has(f"px.{prefix}.{len(parts)}"):
+        parts.append(store.get(f"px.{prefix}.{len(parts)}"))
+    if not parts:
+        return Judgment(Status.NOT_OBSERVED, None, f"no proof is recorded under {prefix!r}")
+    steps: list[Step] = []
+    premises: tuple[Formula, ...] | None = None
+    for i, p in enumerate(parts):
+        comp = p.composition
+        calc = comp.calculation.value if comp is not None else None
+        names = list(comp.inputs.keys()) if comp is not None else None
+        if not isinstance(calc, StepCalculation) or names != [f"c{j}" for j in range(len(names))]:
+            return Judgment(Status.INVALID, None, f"step {i} was not produced by a proof step")
+        cites: list[int] = []
+        for inp in comp.inputs.values():
+            j = next((j for j in range(i) if parts[j] is inp), None)
+            if j is None:
+                return Judgment(Status.INVALID, None, f"step {i} cites a Part that is not an earlier step of this proof")
+            cites.append(j)
+        if premises is None:
+            premises = calc.premises
+        elif calc.premises != premises:
+            return Judgment(Status.INVALID, None, "steps disagree about the premises")
+        steps.append(Step(p.value, calc.rule, tuple(cites)))
+    result = check(steps, premises)
+    if not result.ok:
+        return Judgment(Status.INVALID, None, result.reason)
+    return Judgment(Status.KNOWN, tuple(steps), "")
