@@ -1,0 +1,6 @@
+{"src/dsdk/graph/model.py|compare": "Harmless: only differs for a self-loop, where swapping a node with itself changes nothing.",
+ "src/dsdk/graph/model.py|boolop": "Harmless: no stored edge can touch a missing node, so the lookup still returns nothing.",
+ "src/dsdk/lang/formula_syntax.py|int+1": "Harmless: the loosest operator has precedence 1, so starting at 0 or 1 inside parentheses accepts the same inputs (checked by parsing (a <-> b) and ((a -> b) <-> c)).",
+ "src/dsdk/lang/calc.py|compare": "Was a real gap: error messages could offer let/if after an operator. Closed by two new tests that fail on this exact change.",
+ "src/dsdk/graph/bridges.py|compare": "Was a real gap: relative imports climbing past the top package were untested. Closed by a new test that fails on this exact change.",
+ "return-none-noop": "Not a real change (the tool rewrote `return None` as itself). Tool fixed; these will not appear in the next run."}

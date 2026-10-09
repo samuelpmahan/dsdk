@@ -18,11 +18,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 GH = "https://github.com/samuelpmahan/dsdk/blob/claude/friendly-cray-zex2o8/"
 SECTION = re.compile(r"^\s*#\s*[=\-#]{3,}\s*(.+?)\s*[=\-#]*\s*$")
-TRACK_TESTS = {"dsdk.core": "tests/core", "dsdk.logic": "tests/logic", "dsdk.lang": "tests/lang", "dsdk.graph": "tests/graph"}
+TRACK_TESTS = {"dsdk.core": "tests/core", "dsdk.logic": "tests/logic", "dsdk.lang": "tests/lang", "dsdk.graph": "tests/graph", "dsdk.prob": "tests/prob", "dsdk.worlds": "tests/worlds"}
 PLAIN = {
     "dsdk.core": "the kernel: status values, write-once Parts, recorded calculations and all-or-nothing ticks",
     "dsdk.logic": "propositional logic: formulas, evaluation with unknowns, model enumeration, entailment, a proof checker, induction exercises",
     "dsdk.lang": "the Calc language: a table-driven lexer, two formula parsers, a type checker, step-by-step and direct evaluators, and the bridge back to logic and the kernel",
+    "dsdk.prob": "probability: possible worlds weighted from logic models, exact conditioning, Bayes nets on graph DAGs, belief updates recorded as ticks, seeded sampling checked against exact answers, and the next-track model",
+    "dsdk.worlds": "the worlds dsdk runs on: your Lost Lands 2018 sets and the agents' own build log (networks and Six Degrees are on hold pending your data-source answer)",
     "dsdk.graph": "graphs: BFS with witness paths, cycles, topological order, components, evidence-aware reachability, and graphs built from lineage, formulas and dsdk's own imports",
 }
 
@@ -118,13 +120,16 @@ def main() -> None:
         if mut_path.exists():
             mj = json.loads(mut_path.read_text())
             planted = []
+            tri = json.loads((ROOT / "lab/data/triage.json").read_text()) if (ROOT / "lab/data/triage.json").exists() else {}
             for m in mj["mutants"]:
+                noop = m["kind"] == "return-none" and m["before"] == m["after"]
                 killer = m["killed_by"]
                 killer_claim = claim_by_node.get(re.sub(r"\[.*$", "", killer), "")
                 planted.append({
                     "what": f"{plain_kind(m['kind'], m['before'], m['after'])} in {enclosing(m['file'], m['line'])}",
                     "before": m["before"], "after": m["after"], "where": f"{m['file']}:{m['line']}",
                     "link": f"{GH}{m['file']}#L{m['line']}", "status": m["status"],
+                    "verdict": (tri.get("return-none-noop") if noop else tri.get(f"{m['file']}|{m['kind']}", "")) if m["status"] == "survived" else "",
                     "caught_by": killer_claim or (killer if "timeout" in killer else killer.split("::")[-1].replace("_", " ")),
                 })
             mutation = {"sites": mj["sites_total"], "run": mj["mutants_run"], "killed": mj["killed"],

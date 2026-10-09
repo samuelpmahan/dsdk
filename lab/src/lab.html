@@ -115,6 +115,12 @@ footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;fl
 .bug .where{font-family:var(--mono);font-size:12px;color:var(--muted)}
 .buglist{display:grid;gap:6px;max-height:520px;overflow:auto}
 .groupscroll{display:grid;gap:8px;max-height:640px;overflow:auto;padding-right:4px}
+.stackrow{display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr) minmax(0,1fr);gap:6px 14px;padding:10px 0;border-bottom:1px solid var(--rule);font-size:14px}
+@media (max-width:760px){.stackrow{grid-template-columns:minmax(0,1fr)}}
+.stackrow .nm{font-family:var(--display);font-size:22px;font-weight:800;text-transform:uppercase}
+.stackrow .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.debt{color:var(--amber)} .dead{color:var(--danger)}
+.fn{font-family:var(--mono);font-size:12px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
@@ -172,6 +178,16 @@ footer{font-family:var(--mono);font-size:12px;color:var(--muted);display:flex;fl
     </details>
   </section>
 
+
+
+  <!-- ============ Stack ============ -->
+  <section class="instrument" id="stack" aria-labelledby="stack-h">
+    <div class="face"><h2 id="stack-h">How It Stacks</h2><span class="meta">Up, not wide · measured from the code</span></div>
+    <div class="surface">
+      <p class="lede">Each layer should stand on the ones below it and be stood on by the ones above. This view counts real function calls between dsdk packages, not imports, because imports were easy to satisfy without real use. Red means nothing above uses the layer yet. Amber means the layer leans on too little below it. Each one names who owes the fix.</p>
+      <div id="stack-rows"></div>
+    </div>
+  </section>
 
   <!-- ============ Proof Bench ============ -->
   <section class="instrument" id="bench" aria-labelledby="bench-h">
@@ -440,12 +456,14 @@ function renderEvidence(){
 
 
 // ---------- Proof Bench ----------
-const TRACK_NAMES = {'dsdk.core':'Kernel','dsdk.logic':'Logic','dsdk.lang':'Language','dsdk.graph':'Graphs'};
+const TRACK_NAMES = {'dsdk.core':'Kernel','dsdk.logic':'Logic','dsdk.lang':'Language','dsdk.graph':'Graphs','dsdk.prob':'Probability','dsdk.worlds':'Worlds'};
 const PROOF_NOTES = {
   'dsdk.logic':'Written proofs: the sum formula and "mirroring a tree twice gives it back" were each audited twice by an agent that did not write them. Both are sound; the gaps the first audit found were closed and re-checked by tracing the real code over 988 loop states.',
   'dsdk.lang':'Written proofs (type preservation, termination of evaluation) are being audited now by the other manager.',
   'dsdk.graph':'Written proofs (BFS finds shortest paths, topological sort terminates) are being audited now by the other manager.',
-  'dsdk.core':'No written proofs; the kernel is specified by its tests.'};
+  'dsdk.core':'No written proofs; the kernel is specified by its tests.',
+  'dsdk.prob':'Six written proofs (Bayes rule composes, impossible evidence is exactly the flagged case, the Wumpus closed form 1/(2-p), sampling is unbiased) await audit by the other manager. Before any code existed, the tests caught 49 of 52 bugs planted in a reference version.',
+  'dsdk.worlds':'No written proofs; the loaders are specified by hand-checked slices of the real data.'};
 let benchTrack = 'dsdk.lang';
 function link(href, text){ const a=el('a',{href,target:'_blank',rel:'noopener'}); a.textContent=text; return a; }
 function renderBench(){
@@ -487,12 +505,34 @@ function renderBench(){
       d.append(el('code',{text:`${b.before}  →  ${b.after}`}));
       const w=el('span',{class:'where'}); w.append(link(b.link,b.where)); d.append(w);
       if (b.status==='killed') d.append(el('span',{text:'Caught by: '+b.caught_by}));
-      else d.append(el('span',{class:'meh',text:'No test failed. Triage: harmless rewrite, or a missing test.'}));
+      else d.append(el('span',{class:'meh',text:b.verdict||'No test failed. Not yet triaged: harmless rewrite, or a missing test.'}));
       bugs.append(d);
     }
   }
 }
 $('#bench-q').addEventListener('input', renderBench);
 
-renderEvidence(); renderBuild(); renderBench(); resetCave();
+
+// ---------- Stack ----------
+function renderStack(){
+  const NAMES={'dsdk.core':'Kernel','dsdk.logic':'Logic','dsdk.lang':'Language','dsdk.graph':'Graphs','dsdk.prob':'Probability','dsdk.worlds':'Worlds'};
+  const box=$('#stack-rows'); box.replaceChildren();
+  const rows=[...LAB.stack.packages].reverse();
+  for (const e of rows){
+    const r=el('div',{class:'stackrow'});
+    const a=el('div',{}); a.append(el('div',{class:'nm',text:NAMES[e.package]||e.package}), el('div',{class:'lbl',text:e.package}));
+    const b=el('div',{}); b.append(el('div',{class:'lbl',text:'Calls from below'}));
+    const deps=Object.entries(e.calls);
+    if(!deps.length) b.append(el('div',{text:e.order===0?'Nothing: this is the foundation.':'Nothing.'}));
+    for (const [d,fns] of deps){ const line=el('div',{}); line.append(el('strong',{text:(NAMES[d]||d)+': '}), el('span',{class:'fn',text:fns.join(', ')})); b.append(line); }
+    if(e.thin_owed) b.append(el('div',{class:'debt',text:'Thin: '+e.thin_owed}));
+    const c=el('div',{}); c.append(el('div',{class:'lbl',text:'Used by above'}));
+    if(e.used_by.length) c.append(el('div',{text:e.used_by.map(x=>NAMES[x]||x).join(', ')}));
+    else if(e.owed_to) c.append(el('div',{class:'dead',text:'Nothing yet. Owed by '+e.owed_to}));
+    else c.append(el('div',{class:'lede',text:'Nothing yet (newest layer).'}));
+    r.append(a,b,c); box.append(r);
+  }
+}
+
+renderEvidence(); renderBuild(); renderBench(); renderStack(); resetCave();
 </script>
