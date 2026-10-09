@@ -54,11 +54,29 @@ class MeanEstimate:
 
 def _prepare(belief: Belief, calc_text: str) -> tuple[calc.Expr | None, tuple[str, ...], Judgment | None]:
     """Steps 1 to 3 of the pipeline. Returns ``(expr, free variable names sorted, failure)`` where ``failure`` is the verdict Judgment (INVALID or UNKNOWN) or None."""
-    raise NotImplementedError
+    try:
+        expr = calc.parse_calc(calc_text)
+    except LangError as exc:
+        return None, (), Judgment(Status.INVALID, None, f"unparseable expression: {exc}")
+    names = tuple(sorted(calc.free_vars(expr)))
+    missing = [v for v in names if v not in belief.variables]
+    if missing:
+        return None, names, Judgment(Status.UNKNOWN, None, "unmodelled variables: " + ", ".join(missing))
+    checked = calc.typecheck(expr, {v: calc.Type.BOOL for v in names})
+    if checked.status is not Status.KNOWN:
+        return None, names, Judgment(Status.INVALID, None, f"ill-typed expression: {checked.reason}")
+    if checked.value is not calc.Type.INT:
+        return None, names, Judgment(
+            Status.INVALID, None, f"not an integer expression: {calc.to_source(expr)} has type {checked.value.value}"
+        )
+    return expr, names, None
 
 
 def _value_in_world(expr: calc.Expr, names: tuple[str, ...], world: dict[str, bool]) -> int:
-    raise NotImplementedError
+    value = calc.evaluate(bind_assignment(expr, {v: world[v] for v in names}))
+    if type(value) is not int:
+        raise AssertionError(f"expected an int value, got {value!r}")
+    return value
 
 
 def expectation(belief: Belief, calc_text: str, given_text: str | None = None) -> Judgment:
@@ -66,7 +84,38 @@ def expectation(belief: Belief, calc_text: str, given_text: str | None = None) -
 
     ``TypeError`` for a non-Belief or for texts that are not ``str`` (``given_text`` may be ``None``).
     """
-    raise NotImplementedError
+    if not isinstance(belief, Belief):
+        raise TypeError(f"expectation needs a Belief, not {type(belief).__name__}")
+    if not isinstance(calc_text, str):
+        raise TypeError(f"calc_text must be str, not {type(calc_text).__name__}")
+    if given_text is not None and not isinstance(given_text, str):
+        raise TypeError(f"given_text must be str or None, not {type(given_text).__name__}")
+    expr, names, failure = _prepare(belief, calc_text)
+    if failure is not None:
+        return failure
+    given = None
+    if given_text is not None:
+        parsed = parse_text(given_text, "evidence text")
+        if parsed.status is not Status.KNOWN:
+            return parsed
+        given = parsed.value
+        missing = sorted(set(logic_variables(given)) - set(belief.variables))
+        if missing:
+            return Judgment(Status.UNKNOWN, None, "unmodelled variables: " + ", ".join(missing))
+    total = Fraction(0)
+    acc = Fraction(0)
+    for w in belief.worlds:
+        world = w.assignment()
+        if given is not None and not logic_evaluate(given, world):
+            continue
+        total += w.weight
+        if w.weight:
+            acc += w.weight * _value_in_world(expr, names, world)
+    if total == 0:
+        if given_text is not None:
+            return Judgment(Status.INVALID, None, "evidence has probability zero: the conditional expectation is undefined")
+        return Judgment(Status.INVALID, None, "belief has zero total weight: no expectation is defined")
+    return Judgment(Status.KNOWN, acc / total, "")
 
 
 def sample_expectation(belief: Belief, calc_text: str, n: int, seed: int) -> Judgment:
@@ -77,4 +126,20 @@ def sample_expectation(belief: Belief, calc_text: str, n: int, seed: int) -> Jud
     :func:`expectation` (unparseable, unmodelled, ill-typed, not integer); ``INVALID`` for a belief of zero total weight (``sample_worlds``'s verdict, unchanged); ``UNKNOWN``
     (reason says there are no draws) for ``n == 0``. ``mean`` is ``sum / n`` as a float; ``stderr`` uses the sample variance with ``n - 1`` in the denominator.
     """
-    raise NotImplementedError
+    if not isinstance(belief, Belief):
+        raise TypeError(f"sample_expectation needs a Belief, not {type(belief).__name__}")
+    if not isinstance(calc_text, str):
+        raise TypeError(f"calc_text must be str, not {type(calc_text).__name__}")
+    drawn = sample_worlds(belief, n, seed)
+    expr, names, failure = _prepare(belief, calc_text)
+    if failure is not None:
+        return failure
+    if drawn.status is not Status.KNOWN:
+        return drawn
+    if n == 0:
+        return Judgment(Status.UNKNOWN, None, "n is 0: no draws, no estimate")
+    values = [_value_in_world(expr, names, dict(draw)) for draw in drawn.value]
+    mean = sum(values) / n
+    var = sum((x - mean) ** 2 for x in values) / (n - 1) if n > 1 else 0.0
+    stderr = math.sqrt(var / n)
+    return Judgment(Status.KNOWN, MeanEstimate(n, mean, stderr), "")
