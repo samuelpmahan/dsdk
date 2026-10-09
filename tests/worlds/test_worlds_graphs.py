@@ -9,9 +9,10 @@ from toy_world import KEYS, E, K, toy_doc, toy_world
 
 from dsdk.core import Status
 from dsdk.graph import Graph, components
+from dsdk.prob import next_track_distribution, top_next
 from dsdk.worlds import (
-    COSELECTION_LABEL, TRANSITION_LABEL, coselection_graph, dj_graph, parse_lostlands, six_degrees_graph,
-    transition_graph,
+    COSELECTION_LABEL, TRANSITION_LABEL, coselection_graph, dj_graph, next_track_model, parse_lostlands,
+    six_degrees_graph, transition_graph,
 )
 
 
@@ -150,6 +151,38 @@ def test_six_degrees_graph_known_self_loop_is_labelled_transition_only():
 def test_labels_and_constants():
     """The two edge labels are exactly 'transition' and 'co-selection'."""
     assert TRANSITION_LABEL == "transition" and COSELECTION_LABEL == "co-selection"
+
+
+# ==== Next-track model fitted from the transition graph by dsdk.prob ====
+
+
+def test_next_track_model_toy_counts_and_probabilities():
+    """The toy next-track model has all 6 track keys as its vocabulary and exactly the observed move counts, and with smoothing 1 the chance that Two follows One is (2+1)/(2+6) = 3/8 while every other track gets 1/8."""
+    from fractions import Fraction
+
+    m = next_track_model(toy_world())
+    assert m.tracks == tuple(KEYS)
+    assert m.counts == {E(0, 1): 2, E(1, 2): 1, E(2, 3): 1, E(3, 4): 1, E(4, 3): 1}
+    dist = dict(next_track_distribution(m, K(0)).value)
+    assert dist[K(1)] == Fraction(3, 8) and all(dist[k] == Fraction(1, 8) for k in KEYS if k != K(1)) and sum(dist.values()) == 1
+
+
+def test_next_track_model_uses_observed_moves_only_and_passes_alpha_through():
+    """Inferred co-selection never enters the next-track counts, and alpha=0 gives the raw frequencies: after One the model says Two with probability exactly 1 and a never-followed track has no distribution at all."""
+    from dsdk.core import Status
+    from fractions import Fraction
+
+    m = next_track_model(toy_world(), alpha=0)
+    assert top_next(m, K(0), 3).value == ((K(1), Fraction(1)),)
+    assert next_track_distribution(m, K(5)).status is Status.UNKNOWN  # Six#001 was never played, so nothing follows it
+    assert next_track_distribution(m, "Nine#001").status is Status.NOT_OBSERVED
+
+
+def test_next_track_model_real_counts_match_the_transition_graph(real_world, slices):
+    """On the real corpus the next-track model has 1,352 tracks and 1,919 total counts, and Space Laces - Torque was followed 12 times in all, matching the independent script."""
+    m = next_track_model(real_world)
+    assert len(m.tracks) == 1352 and sum(m.counts.values()) == len(real_world.transitions) == 1919
+    assert m.outgoing(real_world.tracks[483].key) == sum(slices["tracks"]["483"]["out"].values()) == 12
 
 
 # ==== Real-corpus graphs match the independent counting script ====

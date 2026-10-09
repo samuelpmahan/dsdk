@@ -111,8 +111,9 @@ def test_toy_world_decodes_exactly():
     assert w.sha256 == "" and w.meta["corpus"] == "toy"
     assert [a.name for a in w.artists] == ["Ada", "Bo", "Cy"] and [a.id for a in w.artists] == [0, 1, 2]
     t2 = w.tracks[2]
-    assert (t2.id, t2.key, t2.title, t2.artists, t2.featured, t2.variation, t2.variation_artists) == (
-        2, "Three#001", "Three", (2,), (0,), "REMIX", (1,))
+    assert (t2.id, t2.key, t2.title, t2.artist, t2.artists, t2.featured, t2.variation, t2.variation_artists) == (
+        2, "Three#001", "Three", "Cy", (2,), (0,), "REMIX", (1,))
+    assert w.tracks[3].artist == "Ada & Bo"
     assert w.tracks[0].variation is None and w.tracks[3].artists == (0, 1)
     assert [(g.id, g.label, g.members, g.truncated) for g in w.groups] == [
         (0, "Ada", (0,), False), (1, "Bo & Cy", (1, 2), False), (2, "Cy + More", (2,), True)]
@@ -131,6 +132,30 @@ def test_toy_labels():
     assert w.track_label(2) == "Cy - Three (REMIX)"  # featured Ada is NOT in the label
     assert w.track_label(3) == "Ada & Bo - Four"
     assert w.date_label(0) == "2018-01-01" and w.date_label(1) == "2018-01-02" and w.date_label(None) is None
+
+
+def test_tracks_have_unique_string_keys_and_an_artist_string():
+    """Every track carries a unique string key (what graphs use as the node name) and a readable artist string, and the key can be turned back into the track ID."""
+    w = toy_world()
+    assert [w.track_key(i) for i in range(6)] == ["One#001", "Two#001", "Three#001", "Four#001", "Five#001", "Six#001"]
+    assert [w.track_index(w.track_key(i)) for i in range(6)] == list(range(6))
+    assert [t.artist for t in w.tracks] == ["Ada", "Bo", "Cy", "Ada & Bo", "Bo", "Cy"]
+    with pytest.raises(KeyError):
+        w.track_index("Nine#001")
+    with pytest.raises(IndexError):
+        w.track_key(-1)
+    with pytest.raises(IndexError):
+        w.track_key(6)
+
+
+def test_a_transition_row_is_source_target_group_date_in_that_order():
+    """In the raw file a transition row is [source track, target track, DJ credit, date index], counting columns from 0: column 2 is the DJ credit and column 3 is the date, and the typed record names them the same way."""
+    w = toy_world()
+    row = TOY_DOC["transitions"][2]  # [2, 3, 1, 0]: Three#001 then Four#001, played by "Bo & Cy" on the first date
+    t = w.transitions[2]
+    assert row == [2, 3, 1, 0] and (t.source, t.target, t.group, t.date) == (2, 3, 1, 0)
+    assert (w.track_key(t.source), w.track_key(t.target), w.groups[t.group].label, w.dates[t.date]) == (
+        "Three#001", "Four#001", "Bo & Cy", "2018-01-01")
 
 
 @pytest.mark.parametrize("bad", [-1, 6, 99])
@@ -264,6 +289,8 @@ BAD_DOCS = {
     "transition target negative": (_mut(lambda d: d["transitions"][4].__setitem__(1, -1)), "transitions[4]"),
     "transition group out of range": (_mut(lambda d: d["transitions"][1].__setitem__(2, 3)), "transitions[1]"),
     "transition date out of range": (_mut(lambda d: d["transitions"][5].__setitem__(3, 5)), "transitions[5]"),
+    "duplicate track key": (_mut(lambda d: d["tracks"][3].__setitem__(0, "One#001")), "tracks[3]"),
+    "duplicate group label": (_mut(lambda d: d["selectorGroups"][2].__setitem__(1, "Ada")), "selectorGroups[2]"),
     "meta not an object": (_mut(lambda d: d.__setitem__("meta", [])), "meta"),
     "meta.tracks wrong": (_mut(lambda d: d["meta"].__setitem__("tracks", 7)), "meta.tracks"),
     "meta.tracks missing": (_mut(lambda d: d["meta"].pop("tracks")), "meta.tracks"),
@@ -275,7 +302,7 @@ BAD_DOCS = {
 
 @pytest.mark.parametrize("name", BAD_DOCS)
 def test_malformed_documents_raise_world_error_naming_the_field(name):
-    """Each of 43 kinds of malformed document (wrong schema, missing key, bad row, out-of-range ID, bool or float where an integer is required, wrong meta count) raises WorldError whose message names the field, never a KeyError or TypeError."""
+    """Each of 45 kinds of malformed document (wrong schema, missing key, bad row, out-of-range ID, bool or float where an integer is required, wrong meta count) raises WorldError whose message names the field, never a KeyError or TypeError."""
     doc, field = BAD_DOCS[name]
     with pytest.raises(WorldError) as err:
         parse_lostlands(doc)

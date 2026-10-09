@@ -32,9 +32,20 @@ def test_lostlands_uses_core_parts_and_judgments():
 
 
 def test_networks_uses_core_status_judgment_and_graph_machinery():
-    """The graph module actually uses Judgment and Status from core and Graph, Edge and known_subgraph from dsdk.graph."""
+    """The graph module actually uses Judgment and Status from core, and builds graphs and answers six-degrees questions with dsdk.graph's Graph, Edge, known_subgraph, reachable, shortest_path and candidate_path."""
     assert {"Judgment", "Status"} <= used_names("networks.py", "dsdk.core")
-    assert {"Graph", "Edge", "known_subgraph"} <= used_names("networks.py", "dsdk.graph")
+    assert {"Graph", "Edge", "known_subgraph", "reachable", "shortest_path", "candidate_path"} <= used_names("networks.py", "dsdk.graph")
+
+
+def test_networks_fits_the_next_track_model_with_dsdk_prob():
+    """The next-track model is fitted by dsdk.prob's model_from_graph from the transition graph, not by code inside dsdk.worlds."""
+    assert {"NextTrackModel", "model_from_graph"} <= used_names("networks.py", "dsdk.prob")
+
+
+def test_networks_has_no_search_of_its_own():
+    """dsdk.worlds contains no hand-written graph search: its source mentions no heap, no queue and no deque."""
+    text = (SRC / "worlds" / "networks.py").read_text()
+    assert not any(word in text for word in ("heapq", "deque", "popleft", "heappop"))
 
 
 def test_buildlog_uses_judgment_for_its_answer():

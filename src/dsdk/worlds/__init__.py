@@ -45,6 +45,7 @@ from .networks import (
     SixDegrees,
     coselection_graph,
     dj_graph,
+    next_track_model,
     six_degrees,
     six_degrees_graph,
     transition_graph,
@@ -55,6 +56,6 @@ __all__ = [
     "LedgerEntry", "LedgerError", "LostLands", "OUTCOMES", "PINNED_SHA256", "SCHEMA", "SOURCE_BRANCH",
     "SOURCE_COMMIT", "SOURCE_REPO", "SelectorGroup", "Selection", "SixDegrees", "TRANSITION_LABEL", "Track",
     "Transition", "WorldError", "check_transitions", "coselection_graph", "describe_provenance", "dj_graph",
-    "first_try_rate", "load_ledger", "load_lostlands", "models", "parse_ledger", "parse_lostlands",
+    "first_try_rate", "load_ledger", "next_track_model", "load_lostlands", "models", "parse_ledger", "parse_lostlands",
     "record_provenance", "sha256_bytes", "six_degrees", "six_degrees_graph", "transition_graph",
 ]

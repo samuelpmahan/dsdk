@@ -24,7 +24,8 @@ A gzip of ONE JSON object with exactly these keys (extra keys are tolerated and 
 * ``dates``         list of ``"YYYY-MM-DD"`` strings. A date's ID is its list position.
 * ``selections``    list of rows ``[track, group, date]``: that group played that track in a set on that date. The
                     rows of one set are consecutive and in PLAY ORDER; a track may repeat inside a set.
-* ``transitions``   list of rows ``[source, target, group, date]``: within a set the group played ``source`` and
+* ``transitions``   list of rows ``[source, target, group, date]`` (0-based COLUMN 0 = source track, 1 = target track,
+                    2 = group = the DJ credit, 3 = date index; there is no third "track" column): within a set the group played ``source`` and
                     then ``target`` back-to-back. They are exactly the consecutive pairs of that set's selections.
 
 ``date`` is an index into ``dates`` or ``-1`` meaning "the source file had no date"; the decoded records use ``None``
@@ -80,11 +81,14 @@ class Artist:
 
 @dataclass(frozen=True)
 class Track:
-    """``artists`` / ``featured`` / ``variation_artists`` are tuples of artist IDs, in file order."""
+    """One track. ``key`` is its STRING identity (``"Torque#001"``-style, unique in the world) and is what graphs use as the
+    node name. ``artist`` is the primary artists' names joined with ``" & "`` (``""`` if none). ``artists`` /
+    ``featured`` / ``variation_artists`` are tuples of artist IDs, in file order."""
 
     id: int
     key: str
     title: str
+    artist: str
     artists: tuple[int, ...]
     featured: tuple[int, ...]
     variation: str | None
@@ -142,13 +146,15 @@ class LostLands:
 
         ``IndexError`` for a track ID outside ``range(len(tracks))`` (negative IDs included: no wrap-around).
         """
-        t = self._track(track)
-        return " & ".join(self.artists[a].name for a in t.artists)
+        raise NotImplementedError
 
-    def _track(self, track: int) -> Track:
-        if not _is_int(track) or not 0 <= track < len(self.tracks):
-            raise IndexError(f"track {track!r} is outside range({len(self.tracks)})")
-        return self.tracks[track]
+    def track_key(self, track: int) -> str:
+        """The string key of track ID ``track`` (``tracks[track].key``). Same ``IndexError`` rule as :meth:`track_artists`."""
+        raise NotImplementedError
+
+    def track_index(self, key: str) -> int:
+        """The track ID whose ``key`` is ``key``. ``KeyError`` (message ``repr(key)``) if there is no such key."""
+        raise NotImplementedError
 
     def track_label(self, track: int) -> str:
         """``"<track_artists> - <title>"``, plus ``" (<variation>)"`` when the track has a variation.
@@ -156,62 +162,23 @@ class LostLands:
         Example: ``"Virtual Riot & 12th Planet - Codename X (REMIX)"``-style text. Featured artists are NOT in the
         label. Same ``IndexError`` rule as :meth:`track_artists`.
         """
-        t = self._track(track)
-        label = f"{self.track_artists(track)} - {t.title}"
-        if t.variation is not None:
-            label += f" ({t.variation})"
-        return label
+        raise NotImplementedError
 
     def date_label(self, date: int | None) -> str | None:
         """``dates[date]``; ``None`` for ``None``. ``IndexError`` for any other out-of-range index."""
-        if date is None:
-            return None
-        if not _is_int(date) or not 0 <= date < len(self.dates):
-            raise IndexError(f"date {date!r} is outside range({len(self.dates)})")
-        return self.dates[date]
+        raise NotImplementedError
 
     def sets(self) -> dict[tuple[int, int | None], tuple[int, ...]]:
         """Every set ``(group, date)`` mapped to its track IDs in play order (repeats kept).
 
         Keys are in FIRST-APPEARANCE order of ``selections``. The real world has 54 sets and 1,973 selections.
         """
-        found: dict[tuple[int, int | None], list[int]] = {}
-        for s in self.selections:
-            found.setdefault((s.group, s.date), []).append(s.track)
-        return {key: tuple(tracks) for key, tracks in found.items()}
+        raise NotImplementedError
 
 
 def sha256_bytes(data: bytes) -> str:
     """Lower-case hex SHA-256 of ``data``."""
-    return hashlib.sha256(data).hexdigest()
-
-
-def _is_int(value: Any) -> bool:
-    """An ``int`` that is not a ``bool`` (``bool`` is an ``int`` subclass in Python)."""
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _is_list(value: Any) -> bool:
-    return isinstance(value, (list, tuple))
-
-
-def _id(value: Any, bound: int, where: str) -> int:
-    if not _is_int(value) or not 0 <= value < bound:
-        raise WorldError(f"{where} must be an integer ID in range({bound}), got {value!r}")
-    return value
-
-
-def _ids(value: Any, bound: int, where: str) -> tuple[int, ...]:
-    if not _is_list(value):
-        raise WorldError(f"{where} must be a list of IDs, got {value!r}")
-    return tuple(_id(x, bound, where) for x in value)
-
-
-def _date(value: Any, bound: int, where: str) -> int | None:
-    """``-1`` (no date) becomes ``None``; any other value must be an index into ``dates``."""
-    if not _is_int(value) or not (value == -1 or 0 <= value < bound):
-        raise WorldError(f"{where} must be -1 or an integer index in range({bound}), got {value!r}")
-    return None if value == -1 else value
+    raise NotImplementedError
 
 
 
@@ -226,9 +193,11 @@ def parse_lostlands(doc: Mapping[str, Any], *, sha256: str = "") -> LostLands:
     2. every key of :data:`TOP_KEYS` is present (the message names the missing key).
     3. ``artists`` is a list of ``str``; ``dates`` is a list of ``str``.
     4. every ``tracks`` row has exactly 6 items of the documented types; every artist ID inside is in range.
-       ``variation`` is ``None`` or ``str``. Messages say ``tracks[<row>]``.
+       ``variation`` is ``None`` or ``str``; ``key`` must be UNIQUE across tracks (graphs name nodes by key; message
+       ``tracks[<row>]: duplicate key '<key>'``). Messages say ``tracks[<row>]``.
     5. every ``selectorGroups`` row is ``[members, label, truncated]``; ``members`` IDs are in range; ``truncated``
-       is ``0``/``1`` or ``False``/``True``.
+       is ``0``/``1`` or ``False``/``True``; ``label`` must be UNIQUE (message ``selectorGroups[<row>]: duplicate label
+       '<label>'``).
     6. every ``selections`` row is 3 integers ``[track, group, date]`` and every ``transitions`` row is 4 integers
        ``[source, target, group, date]``; IDs in range; ``date`` is ``-1`` or in range. A ``bool`` is NEVER an
        integer here.
@@ -237,111 +206,7 @@ def parse_lostlands(doc: Mapping[str, Any], *, sha256: str = "") -> LostLands:
 
     ``sha256`` is stored as given. IDs are list positions, so the order of the file is preserved exactly.
     """
-    # 1. schema
-    if not isinstance(doc, Mapping) or doc.get("schema") != SCHEMA:
-        raise WorldError(f"schema must be {SCHEMA!r} in a JSON object")
-    # 2. missing keys
-    for key in TOP_KEYS:
-        if key not in doc:
-            raise WorldError(f"missing key {key!r}")
-    # 3. artists and dates
-    artists_doc = doc["artists"]
-    if not _is_list(artists_doc) or not all(isinstance(x, str) for x in artists_doc):
-        raise WorldError("artists must be a list of strings")
-    dates_doc = doc["dates"]
-    if not _is_list(dates_doc) or not all(isinstance(x, str) for x in dates_doc):
-        raise WorldError("dates must be a list of strings")
-    n_artists, n_dates = len(artists_doc), len(dates_doc)
-
-    # 4. tracks
-    tracks: list[Track] = []
-    for i, row in enumerate(doc["tracks"]):
-        where = f"tracks[{i}]"
-        if not _is_list(row) or len(row) != 6:
-            raise WorldError(f"{where} must be a list of 6 items")
-        key, title, artists, featured, variation, variation_artists = row
-        if not isinstance(key, str) or not isinstance(title, str):
-            raise WorldError(f"{where}: key and title must be strings")
-        if variation is not None and not isinstance(variation, str):
-            raise WorldError(f"{where}: variation must be null or a string")
-        tracks.append(Track(
-            id=i,
-            key=key,
-            title=title,
-            artists=_ids(artists, n_artists, f"{where}.artists"),
-            featured=_ids(featured, n_artists, f"{where}.featured"),
-            variation=variation,
-            variation_artists=_ids(variation_artists, n_artists, f"{where}.variationArtists"),
-        ))
-
-    # 5. selector groups
-    groups: list[SelectorGroup] = []
-    for i, row in enumerate(doc["selectorGroups"]):
-        where = f"selectorGroups[{i}]"
-        if not _is_list(row) or len(row) != 3:
-            raise WorldError(f"{where} must be a list of 3 items")
-        members, label, truncated = row
-        if not isinstance(label, str):
-            raise WorldError(f"{where}.label must be a string")
-        if isinstance(truncated, bool):
-            flag = truncated
-        elif _is_int(truncated) and truncated in (0, 1):
-            flag = bool(truncated)
-        else:
-            raise WorldError(f"{where}.truncated must be 0, 1, false or true, got {truncated!r}")
-        groups.append(SelectorGroup(
-            id=i,
-            label=label,
-            members=_ids(members, n_artists, f"{where}.members"),
-            truncated=flag,
-        ))
-
-    # 6. selections and transitions
-    n_tracks, n_groups = len(tracks), len(groups)
-    selections: list[Selection] = []
-    for i, row in enumerate(doc["selections"]):
-        where = f"selections[{i}]"
-        if not _is_list(row) or len(row) != 3:
-            raise WorldError(f"{where} must be a list of 3 integers")
-        track, group, date = row
-        selections.append(Selection(
-            track=_id(track, n_tracks, f"{where}.track"),
-            group=_id(group, n_groups, f"{where}.group"),
-            date=_date(date, n_dates, f"{where}.date"),
-        ))
-    transitions: list[Transition] = []
-    for i, row in enumerate(doc["transitions"]):
-        where = f"transitions[{i}]"
-        if not _is_list(row) or len(row) != 4:
-            raise WorldError(f"{where} must be a list of 4 integers")
-        source, target, group, date = row
-        transitions.append(Transition(
-            source=_id(source, n_tracks, f"{where}.source"),
-            target=_id(target, n_tracks, f"{where}.target"),
-            group=_id(group, n_groups, f"{where}.group"),
-            date=_date(date, n_dates, f"{where}.date"),
-        ))
-
-    # 7. meta counts
-    meta = doc["meta"]
-    if not isinstance(meta, Mapping):
-        raise WorldError("meta must be a JSON object")
-    for field, actual in (("tracks", n_tracks), ("selectionEvents", len(selections)),
-                          ("transitionEvents", len(transitions))):
-        value = meta.get(field)
-        if not _is_int(value) or value != actual:
-            raise WorldError(f"meta.{field} must equal {actual}, got {value!r}")
-
-    return LostLands(
-        sha256=sha256,
-        meta=dict(meta),
-        artists=tuple(Artist(i, name) for i, name in enumerate(artists_doc)),
-        tracks=tuple(tracks),
-        groups=tuple(groups),
-        dates=tuple(dates_doc),
-        selections=tuple(selections),
-        transitions=tuple(transitions),
-    )
+    raise NotImplementedError
 
 
 def load_lostlands(path: str | Path | None = None, *, expected_sha256: str | None = PINNED_SHA256) -> LostLands:
@@ -355,19 +220,7 @@ def load_lostlands(path: str | Path | None = None, *, expected_sha256: str | Non
       message starts with ``"gzip:"`` or ``"json:"`` respectively.
     * On success ``world.sha256`` is the lower-case digest.
     """
-    raw = (FIXTURE_PATH if path is None else Path(path)).read_bytes()
-    digest = sha256_bytes(raw)
-    if expected_sha256 is not None and digest != expected_sha256.lower():
-        raise IntegrityError(f"sha256 mismatch: expected {expected_sha256.lower()}, got {digest}")
-    try:
-        text = gzip.decompress(raw)
-    except (OSError, EOFError) as err:
-        raise WorldError(f"gzip: {err}") from err
-    try:
-        doc = json.loads(text.decode("utf-8"))
-    except ValueError as err:  # JSONDecodeError and UnicodeDecodeError are both ValueErrors
-        raise WorldError(f"json: {err}") from err
-    return parse_lostlands(doc, sha256=digest)
+    raise NotImplementedError
 
 
 def check_transitions(world: LostLands) -> Judgment:
@@ -384,18 +237,7 @@ def check_transitions(world: LostLands) -> Judgment:
     ORDERED list, in the order they appear in ``world.transitions``. KNOWN False is a real answer (we looked and it
     is inconsistent); this function never returns UNKNOWN.
     """
-    sets = world.sets()
-    actual: dict[tuple[int, int | None], list[tuple[int, int]]] = {}
-    for t in world.transitions:
-        actual.setdefault((t.group, t.date), []).append((t.source, t.target))
-    for (group, date), tracks in sets.items():
-        if actual.get((group, date), []) != list(zip(tracks, tracks[1:])):
-            return Judgment(Status.KNOWN, False,
-                            f"set ({group}, {date}) has transitions that are not its consecutive pairs")
-    for t in world.transitions:
-        if (t.group, t.date) not in sets:
-            return Judgment(Status.KNOWN, False, f"transition set ({t.group}, {t.date}) has no selections")
-    return Judgment(Status.KNOWN, True, f"transitions match the consecutive pairs of {len(sets)} sets")
+    raise NotImplementedError
 
 
 def describe_provenance(values: Mapping[str, Any]) -> str:

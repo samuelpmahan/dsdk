@@ -11,6 +11,7 @@ Toy derivation. Known edges: 0>1 1>2 2>3 3>4 4>3. Inferred edges: 1>0 2>1 3>2 0>
 import random
 
 import pytest
+import oracle_degrees
 from toy_world import KEYS, E, K, toy_world
 
 from dsdk.core import Judgment, Status
@@ -155,7 +156,7 @@ def test_undated_set_sorts_first_in_hop_sets():
     assert h.sets == ((0, None), (0, 0)) and h.count == 2 and h.evidence is Status.KNOWN
 
 
-# ==== The fast search gives the same answers as dsdk.graph reachability on 40 random worlds ====
+# ==== dsdk.graph's answers agree with an independent brute-force search on 40 random worlds ====
 def random_world(seed):
     rng = random.Random(seed)
     n_tracks, n_groups, n_dates = rng.randint(2, 14), rng.randint(1, 3), rng.randint(1, 2)
@@ -175,28 +176,25 @@ def random_world(seed):
 
 
 @pytest.mark.parametrize("seed", range(40))
-def test_matches_dsdk_graph_reachable_on_random_worlds(seed):
-    """The indexed search must be indistinguishable from dsdk.graph on every ordered pair: same Judgment (status, value
-    and the exact reason string) and the same witness path (BFS tie-breaks for KNOWN, candidate_path for UNKNOWN)."""
+def test_matches_an_independent_search_on_random_worlds(seed):
+    """On 40 random small worlds, for every ordered pair of tracks, dsdk.graph's answer (through SixDegrees) has the same status and the same witness path as a separate brute-force oracle that shares no code with dsdk, and every step's evidence label matches the graph edge."""
     world = random_world(seed)
     sd = SixDegrees(world)
-    g = sd.graph
     keys = [t.key for t in world.tracks]
-    for a in keys:
-        for b in keys:
-            d = sd.query(a, b)
-            expected = reachable(g, a, b)
-            assert d.judgment == expected, f"seed {seed}: {a}->{b}"
-            if expected.status is Status.KNOWN:
-                assert d.path == shortest_path(known_subgraph(g), a, b)
-            elif expected.reason.startswith("uncertain"):
-                assert d.path == candidate_path(g, a, b)
-            else:
-                assert d.path is None
-            if d.path:
+    sel = [(x.track, x.group, x.date) for x in world.selections]
+    trn = [(x.source, x.target, x.group, x.date) for x in world.transitions]
+    for a in range(len(keys)):
+        for b in range(len(keys)):
+            d = sd.query(keys[a], keys[b])
+            status, reason, path = oracle_degrees.answer(sel, trn, a, b)
+            assert d.judgment.status.value == status, f"seed {seed}: {a}->{b}"
+            assert (None if d.path is None else [keys.index(k) for k in d.path]) == path, f"seed {seed}: {a}->{b}"
+            if status == "known":
+                assert d.judgment.reason == "known path: " + " -> ".join(keys[i] for i in path)
+            if path:
                 assert [(h.source, h.target) for h in d.hops] == list(zip(d.path, d.path[1:]))
-                for h in d.hops:
-                    assert h.evidence is g.get_edge(h.source, h.target).evidence
+                assert [h.evidence is Status.UNKNOWN for h in d.hops] == [sd.graph.get_edge(h.source, h.target).evidence is Status.UNKNOWN for h in d.hops]
+            assert d.judgment == reachable(sd.graph, keys[a], keys[b])
 
 
 # ==== Six degrees on the real corpus, checked against the independent oracle ====
