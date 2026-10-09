@@ -46,7 +46,12 @@ def _check_int(x: object, name: str, minimum: int) -> None:
 def standard_error(successes: int, trials: int) -> float:
     """``sqrt(p_hat * (1 - p_hat) / trials)`` with ``p_hat = successes / trials``. ``trials`` must be an int >= 1 and
     ``0 <= successes <= trials`` (``TypeError`` for bool/non-int, ``ValueError`` for range). Example: (50, 100) -> 0.05."""
-    raise NotImplementedError
+    _check_int(trials, "trials", 1)
+    _check_int(successes, "successes", 0)
+    if successes > trials:
+        raise ValueError(f"successes ({successes}) must not exceed trials ({trials})")
+    p = successes / trials
+    return math.sqrt(p * (1 - p) / trials)
 
 
 def wilson_interval(successes: int, trials: int, z: float = Z95) -> tuple[float, float]:
@@ -62,7 +67,26 @@ def wilson_interval(successes: int, trials: int, z: float = Z95) -> tuple[float,
     (``TypeError`` / ``ValueError``). Example: (50, 100) -> (0.4038, 0.5962) to 4 decimals. For 0 successes the low end is
     exactly 0.0 and the high end is positive (the interval does not collapse); symmetric for ``successes == trials``.
     """
-    raise NotImplementedError
+    _check_int(trials, "trials", 1)
+    _check_int(successes, "successes", 0)
+    if successes > trials:
+        raise ValueError(f"successes ({successes}) must not exceed trials ({trials})")
+    if isinstance(z, bool) or not isinstance(z, (int, float)):
+        raise TypeError(f"z must be a float, not {type(z).__name__}")
+    if not math.isfinite(z) or z <= 0:
+        raise ValueError(f"z must be positive and finite, got {z}")
+    p = successes / trials
+    zz = z * z
+    denom = 1 + zz / trials
+    centre = (p + zz / (2 * trials)) / denom
+    half = z * math.sqrt(p * (1 - p) / trials + zz / (4 * trials * trials)) / denom
+    low = max(0.0, min(1.0, centre - half))
+    high = max(0.0, min(1.0, centre + half))
+    if successes == 0:
+        low = 0.0
+    if successes == trials:
+        high = 1.0
+    return (low, high)
 
 
 @dataclass(frozen=True)
@@ -88,7 +112,15 @@ class Estimate:
 
 def make_estimate(successes: int, trials: int, drawn: int) -> Estimate:
     """Build an :class:`Estimate` from the counts (``trials >= 1``; ``drawn >= trials`` else ``ValueError``)."""
-    raise NotImplementedError
+    _check_int(trials, "trials", 1)
+    _check_int(successes, "successes", 0)
+    if successes > trials:
+        raise ValueError(f"successes ({successes}) must not exceed trials ({trials})")
+    _check_int(drawn, "drawn", 0)
+    if drawn < trials:
+        raise ValueError(f"drawn ({drawn}) must be >= trials ({trials})")
+    low, high = wilson_interval(successes, trials)
+    return Estimate(successes, trials, drawn, successes / trials, standard_error(successes, trials), low, high)
 
 
 @dataclass(frozen=True)
@@ -111,7 +143,16 @@ class Comparison:
 
 def make_comparison(exact: Fraction, estimate: Estimate) -> Comparison:
     """Fill a :class:`Comparison` from an exact value and an estimate (formulas in the class docstring)."""
-    raise NotImplementedError
+    target = float(exact)
+    error = abs(estimate.p_hat - target)
+    if estimate.stderr > 0:
+        z_score = error / estimate.stderr
+    elif error == 0:
+        z_score = 0.0
+    else:
+        z_score = math.inf
+    covered = estimate.low <= target <= estimate.high
+    return Comparison(exact=exact, estimate=estimate, error=error, z_score=z_score, covered=covered)
 
 
 def inverse_cdf_draws(weights: Sequence[Fraction], n: int, seed: int) -> tuple[int, ...]:
@@ -122,7 +163,28 @@ def inverse_cdf_draws(weights: Sequence[Fraction], n: int, seed: int) -> tuple[i
     ``n == 0`` gives ``()``. The same ``(weights, n, seed)`` always gives the same tuple, and the first ``m`` draws of
     ``n`` draws equal the ``m`` draws made with the same seed (draws are consumed one ``rng.random()`` at a time).
     """
-    raise NotImplementedError
+    if not isinstance(weights, Sequence) or isinstance(weights, (str, bytes)):
+        raise TypeError("weights must be a sequence of Fraction")
+    if len(weights) == 0:
+        raise ValueError("weights must be non-empty")
+    for w in weights:
+        if not isinstance(w, Fraction):
+            raise TypeError(f"weights must be Fraction, not {type(w).__name__}")
+        if w < 0:
+            raise ValueError(f"weights must be non-negative, got {w}")
+    _check_int(n, "n", 0)
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise TypeError(f"seed must be an int, not {type(seed).__name__}")
+    total = sum(weights, Fraction(0))
+    if total <= 0:
+        raise ValueError("weights must have a positive sum")
+    cum: list[float] = []
+    running = Fraction(0)
+    for w in weights:
+        running += w
+        cum.append(float(running / total))
+    rng = random.Random(seed)
+    return tuple(bisect.bisect_right(cum, rng.random()) for _ in range(n))
 
 
 def sample_worlds(b: Belief, n: int, seed: int) -> Judgment:

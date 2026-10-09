@@ -59,11 +59,28 @@ class WeightedWorld:
     weight: Fraction
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        if not isinstance(self.values, tuple):
+            raise TypeError(f"WeightedWorld.values must be a tuple, not {type(self.values).__name__}")
+        previous: str | None = None
+        for item in self.values:
+            if not (isinstance(item, tuple) and len(item) == 2):
+                raise TypeError(f"each WeightedWorld value must be a (name, bool) pair, got {item!r}")
+            name, value = item
+            if not isinstance(name, str):
+                raise TypeError(f"variable name must be a str, not {type(name).__name__}")
+            if type(value) is not bool:
+                raise TypeError(f"value of {name!r} must be a bool, not {type(value).__name__}")
+            if previous is not None and not previous < name:
+                raise ValueError(f"WeightedWorld names must be strictly increasing: {previous!r} then {name!r}")
+            previous = name
+        if not isinstance(self.weight, Fraction):
+            raise TypeError(f"WeightedWorld.weight must be a Fraction, not {type(self.weight).__name__}")
+        if self.weight < 0:
+            raise ValueError(f"WeightedWorld.weight must be >= 0, got {self.weight}")
 
     def assignment(self) -> dict[str, bool]:
         """The world as a fresh ``dict`` ``{name: bool}`` (what ``dsdk.logic.evaluate`` takes)."""
-        raise NotImplementedError
+        return dict(self.values)
 
 
 @dataclass(frozen=True)
@@ -83,17 +100,35 @@ class Belief:
     worlds: tuple[WeightedWorld, ...]
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        if not isinstance(self.variables, tuple) or not all(isinstance(v, str) for v in self.variables):
+            raise TypeError("Belief.variables must be a tuple of str")
+        for a, b in zip(self.variables, self.variables[1:]):
+            if not a < b:
+                raise ValueError(f"Belief.variables must be strictly increasing: {a!r} then {b!r}")
+        if not isinstance(self.worlds, tuple) or not all(isinstance(w, WeightedWorld) for w in self.worlds):
+            raise TypeError("Belief.worlds must be a tuple of WeightedWorld")
+        for w in self.worlds:
+            if tuple(name for name, _ in w.values) != self.variables:
+                raise ValueError(f"world names {tuple(name for name, _ in w.values)} differ from Belief.variables {self.variables}")
 
     @property
     def total(self) -> Fraction:
         """Sum of all weights (``Fraction(0)`` for no worlds). After conditioning on ``e`` this is the mass of ``e``."""
-        raise NotImplementedError
+        return sum((w.weight for w in self.worlds), Fraction(0))
 
     def mass(self, f: Formula) -> Fraction:
         """Total weight of the worlds in which ``f`` is true. ``TypeError`` if ``f`` is not a Formula;
         :class:`UnmodelledVariableError` if ``f`` mentions a variable outside ``self.variables``."""
-        raise NotImplementedError
+        if not isinstance(f, Formula):
+            raise TypeError(f"mass() takes a Formula, not {type(f).__name__}")
+        missing = set(variables(f)) - set(self.variables)
+        if missing:
+            raise UnmodelledVariableError(tuple(sorted(missing)))
+        total = Fraction(0)
+        for w in self.worlds:
+            if evaluate(f, w.assignment()):
+                total += w.weight
+        return total
 
 
 def prior_belief(priors: Mapping[str, object], constraint: Formula | None = None) -> Belief:
@@ -114,7 +149,28 @@ def prior_belief(priors: Mapping[str, object], constraint: Formula | None = None
     Example: ``prior_belief({"A": 0.2, "B": 0.2}, Or(Var("A"), Var("B")))`` has 3 worlds with weights 4/25, 4/25, 1/25
     in the order (A=F,B=T), (A=T,B=F), (A=T,B=T), total 9/25.
     """
-    raise NotImplementedError
+    if not isinstance(priors, Mapping):
+        raise TypeError(f"priors must be a Mapping, not {type(priors).__name__}")
+    if constraint is not None and not isinstance(constraint, Formula):
+        raise TypeError(f"constraint must be a Formula or None, not {type(constraint).__name__}")
+    for key in priors:
+        if not isinstance(key, str):
+            raise TypeError(f"prior names must be str, not {type(key).__name__}")
+    formula: Formula = Const(True) if constraint is None else constraint
+    names = tuple(sorted(set(priors) | set(variables(formula))))
+    if len(names) > MAX_VARIABLES:
+        raise ValueError(f"a belief may range over at most {MAX_VARIABLES} variables, got {len(names)}")
+    probs = {key: to_prob(priors[key], key) for key in sorted(priors)}
+    worlds = []
+    for model in models(formula, over=names):
+        weight = Fraction(1)
+        for name in names:
+            p = probs.get(name)
+            if p is None:
+                continue
+            weight *= p if model[name] else 1 - p
+        worlds.append(WeightedWorld(tuple((n, model[n]) for n in names), weight))
+    return Belief(names, tuple(worlds))
 
 
 def reweight(b: Belief, likelihood: Callable[[dict[str, bool]], object]) -> Belief:
