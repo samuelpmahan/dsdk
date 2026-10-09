@@ -306,12 +306,12 @@ EXACT_BISECTION_STEPS = 60
 
 def _binom_tail_ge(n: int, k: int, p: Fraction) -> Fraction:
     """Exact ``P(X >= k)`` for ``X ~ Binomial(n, p)`` with rational ``p`` (``Fraction`` arithmetic, no rounding)."""
-    raise NotImplementedError
+    return sum((math.comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(k, n + 1)), Fraction(0))
 
 
 def _binom_tail_le(n: int, k: int, p: Fraction) -> Fraction:
     """Exact ``P(X <= k)`` for ``X ~ Binomial(n, p)`` with rational ``p``."""
-    raise NotImplementedError
+    return sum((math.comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(0, k + 1)), Fraction(0))
 
 
 def exact_interval(successes: int, trials: int, confidence: object = 0.95) -> tuple[float, float]:
@@ -338,4 +338,44 @@ def exact_interval(successes: int, trials: int, confidence: object = 0.95) -> tu
     errors a ``ValueError``, checked in the order trials, successes, then ``successes > trials``); ``confidence`` an int/Fraction/float
     strictly between 0 and 1 (``to_prob`` rules for type and finiteness; exactly 0 or 1 is a ``ValueError``).
     """
-    raise NotImplementedError
+    _check_int(trials, "trials", 1)
+    _check_int(successes, "successes", 0)
+    if successes > trials:
+        raise ValueError(f"successes ({successes}) must not exceed trials ({trials})")
+    level = to_prob(confidence, "confidence")
+    if level == 0 or level == 1:
+        raise ValueError(f"confidence must be strictly between 0 and 1, got {level}")
+    half = (1 - level) / 2
+    n, k = trials, successes
+
+    if k > 0:
+        lo, hi = Fraction(0), Fraction(1)
+        for _ in range(EXACT_BISECTION_STEPS):
+            mid = (lo + hi) / 2
+            if _binom_tail_ge(n, k, mid) >= half:
+                hi = mid
+            else:
+                lo = mid
+        low = lo
+    else:
+        low = Fraction(0)
+
+    if k < n:
+        lo, hi = Fraction(0), Fraction(1)
+        for _ in range(EXACT_BISECTION_STEPS):
+            mid = (lo + hi) / 2
+            if _binom_tail_le(n, k, mid) > half:
+                lo = mid
+            else:
+                hi = mid
+        high = hi
+    else:
+        high = Fraction(1)
+
+    low_f = float(low)
+    if Fraction(low_f) > low:
+        low_f = math.nextafter(low_f, 0.0)
+    high_f = float(high)
+    if Fraction(high_f) < high:
+        high_f = min(1.0, math.nextafter(high_f, 1.0))
+    return (low_f, high_f)
